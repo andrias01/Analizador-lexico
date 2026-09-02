@@ -1,0 +1,25 @@
+// Programa con error SEMANTICO deliberado.
+// Es lexicamente valido (todos los tokens existen y estan bien escritos)
+// y sintacticamente valido (respeta la gramatica BNF), pero viola las
+// reglas de tipos que exige Gleam como destino (ver gramatica_BNF_Paisascript.txt
+// seccion 6.3):
+//   1) se declara "numerito" (Int) y se asigna una cadena de texto
+//   2) se suma un numerito (Int) con un quebradito (Float) sin conversion;
+//      Gleam no mezcla Int y Float de forma implicita
+//   3) se usa una variable que nunca fue declarada en ningun ambito
+//   4) se llama a la funcion con menos argumentos de los que declara
+
+hagale_pues sumar(numerito a, numerito b) pa_que_lleve numerito dele_pues
+    entregue_pues a + b
+ya_quedo
+
+pille_pues numerito edad = "veinte anios"        // error: cuento asignado a numerito
+
+pille_pues quebradito precio = 19.99
+pille_pues numerito cantidad = 3
+pille_pues total = precio + cantidad             // error: Float + Int sin conversion
+
+hable_pues(saldo_disponible)                     // error: identificador no declarado
+
+pille_pues numerito resultado = sumar(5)         // error: faltan argumentos
+hable_pues(resultado)

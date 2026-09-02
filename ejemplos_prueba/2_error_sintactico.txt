@@ -1,0 +1,23 @@
+// Programa con error SINTACTICO deliberado.
+// Todos los tokens son lexicamente validos (por eso el lexer de esta
+// entrega no reporta nada), pero la estructura viola la gramatica BNF:
+// el bloque "si_acaso" que empieza abajo NUNCA se cierra con "asi_quedo"
+// (produccion <sent_si> ::= si_acaso <expresion> entonces_pues <bloque>
+// <rama_sino> asi_quedo -- ver gramatica_BNF_Paisascript.txt seccion 3.4).
+// Ademas, "mientras_que" no lleva su palabra "dele_pues" antes del cuerpo.
+
+hagale_pues verificar(numerito x) pa_que_lleve siono dele_pues
+    si_acaso x > 0 entonces_pues
+        pille_pues numerito y = x * 2
+        hable_pues(y)
+    // <-- falta "asi_quedo" aqui: error sintactico
+
+    mientras_que x < 100
+        pille_pues x = x + 1
+    hasta_ahi
+
+    entregue_pues sizas
+ya_quedo
+
+escuche_pues(entrada)
+hable_pues(verificar(entrada))

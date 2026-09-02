@@ -1,4 +1,6 @@
+
 # Paisascript — Analizador Léxico y Gramática BNF
+
 
 **Paisascript** es un lenguaje de programación imperativo-estructurado cuyas
 palabras reservadas provienen de la jerga paisa (Antioquia, Colombia). Es el
@@ -259,6 +261,7 @@ for e in lexer.errores:         # los errores NO abortan el análisis
     print(e.fila, e.columna, e.mensaje)
 ```
 
+Si el analizador encuentra un carácter no permitido (como `@` o `#`), reportará un **ERROR LÉXICO** indicando la posición exacta.
 **Estructuras expuestas**
 
 - `TipoToken` — enumeración de las 54 categorías léxicas. La propiedad
@@ -357,3 +360,4 @@ Las traducciones trabajadas de punta a punta están en
 | 8 | Definición de funciones (destino de scripting/funcional) | ✅ `hagale_pues … ya_quedo` |
 | 9 | Enteros, reales, cadenas y booleanos | ✅ `numerito` `quebradito` `cuento` `siono` |
 | 10 | Asignación y retorno | ✅ `pille_pues` y `entregue_pues` |
+py -3.12 -m streamlit run app.py

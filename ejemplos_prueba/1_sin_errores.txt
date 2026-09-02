@@ -1,0 +1,36 @@
+// Programa SIN errores: valido en lo lexico, lo sintactico y lo semantico.
+// Calcula si un numero es primo y clasifica una nota, combinando funcion,
+// condicional, bucle mientras_que, operadores aritmeticos y modulo.
+
+hagale_pues es_primo(numerito n) pa_que_lleve siono dele_pues
+    si_acaso n < 2 entonces_pues
+        entregue_pues naranjas
+    asi_quedo
+    pille_pues numerito d = 2
+    mientras_que d * d <= n dele_pues
+        si_acaso n % d igualito 0 entonces_pues
+            entregue_pues naranjas
+        asi_quedo
+        pille_pues d = d + 1
+    hasta_ahi
+    entregue_pues sizas
+ya_quedo
+
+hagale_pues clasificar(numerito nota) pa_que_lleve cuento dele_pues
+    si_acaso nota >= 45 y_tambien nota <= 50 entonces_pues
+        entregue_pues "Sobresaliente, mijo"
+    sino_pues
+        si_acaso nota >= 30 entonces_pues
+            entregue_pues "Pasaste raspando"
+        sino_pues
+            entregue_pues "Se quemo, parcero"
+        asi_quedo
+    asi_quedo
+ya_quedo
+
+escuche_pues(numero)
+pille_pues siono resultado = es_primo(numero)
+hable_pues(resultado)
+
+pille_pues numerito nota_final = 47
+hable_pues(clasificar(nota_final))

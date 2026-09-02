@@ -22,6 +22,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from chequeo_estructural import verificar_balance
 from ejemplos import EJEMPLOS
 from lexer import Lexer, TipoToken
 from mapeo_gleam import equivalente, es_directo
@@ -116,8 +117,9 @@ def analizar(codigo: str):
          "Lexema": e.lexema, "Causa": e.mensaje}
         for i, e in enumerate(lexer.errores, start=1)
     ]
-    return utiles, lexer.errores, pd.DataFrame(filas), pd.DataFrame(errores), \
-        lexer.resumen_identificadores()
+    chequeo = verificar_balance(utiles)
+    return (utiles, lexer.errores, pd.DataFrame(filas), pd.DataFrame(errores),
+            lexer.resumen_identificadores(), chequeo)
 
 
 # =============================================================================
@@ -189,6 +191,18 @@ def html_fichas(tokens) -> str:
 # =============================================================================
 #  VISTA 5 — ERRORES CON CURSOR
 # =============================================================================
+
+def extraer_fragmento(fuente: str, inicio: str, fin: str) -> str:
+    """Recorta `fuente` entre dos marcadores (ambos incluidos).
+
+    Se usa para mostrar fragmentos REALES de lexer.py en la pestaña de
+    código: se leen del archivo en vez de transcribirlos a mano, así el
+    ejemplo nunca se desincroniza del código que de verdad se ejecuta.
+    """
+    i = fuente.index(inicio)
+    j = fuente.index(fin, i) + len(fin)
+    return fuente[i:j]
+
 
 def html_error(codigo: str, e) -> str:
     lineas = codigo.split("\n")
@@ -263,17 +277,20 @@ if not codigo.strip():
     st.info("Elija una cadena predefinida, escriba código o suba un archivo.")
     st.stop()
 
-tokens, errores, tabla, tabla_err, identificadores = analizar(codigo)
+tokens, errores, tabla, tabla_err, identificadores, chequeo = analizar(codigo)
 
 # --- Metricas ---------------------------------------------------------------
-c1, c2, c3, c4, c5 = st.columns(5)
+c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("Tokens", len(tokens))
 c2.metric("Errores léxicos", len(errores),
           delta=None if not errores else f"{len(errores)} sin abortar",
           delta_color="inverse")
-c3.metric("Líneas", codigo.count("\n") + 1)
-c4.metric("Identificadores", len(identificadores))
-c5.metric("Reservadas",
+c3.metric("Avisos estructurales", len(chequeo),
+          delta=None if not chequeo else "bloques sin cerrar",
+          delta_color="inverse")
+c4.metric("Líneas", codigo.count("\n") + 1)
+c5.metric("Identificadores", len(identificadores))
+c6.metric("Reservadas",
           sum(1 for t in tokens if t.categoria in ("RESERVADA", "TIPO")))
 
 if errores:
@@ -283,7 +300,19 @@ if errores:
         "igual (requisito 14)."
     )
 else:
-    st.success("Sin errores léxicos: toda la entrada se reconoció.")
+    st.success(
+        "Sin errores léxicos: todo carácter de la entrada forma parte de un "
+        "token válido. *(Esto no revisa la gramática ni los tipos — ver más "
+        "abajo y la pestaña «Errores y verificación».)*"
+    )
+
+if chequeo:
+    st.warning(
+        f"Además, el chequeo estructural encontró **{len(chequeo)} bloque(s) "
+        "sin cerrar bien** (ver pestaña «Errores y verificación»). Esto es "
+        "un aviso adicional, no reemplaza al analizador sintáctico completo "
+        "de la entrega 2."
+    )
 
 with st.expander("Ver / editar el código fuente", expanded=False):
     st.code(codigo, language=None)
@@ -292,9 +321,10 @@ pestañas = st.tabs([
     "Código segmentado",
     "Flujo de tokens",
     "Tabla de símbolos",
-    "Errores léxicos",
+    "Errores y verificación",
     "Resumen",
     "Traducción a Gleam",
+    "Código del analizador",
     "Referencia",
 ])
 
@@ -356,6 +386,10 @@ with pestañas[2]:
 # --- 4. Errores -------------------------------------------------------------
 with pestañas[3]:
     st.subheader("Reporte de errores léxicos")
+    st.caption(
+        "Esto es lo que exige el requisito 14: caracteres o secuencias que "
+        "no corresponden a **ningún token válido** del lenguaje."
+    )
     if not errores:
         st.success("No se encontró ningún error léxico en esta entrada.")
         st.caption("Pruebe la cadena predefinida «ERRORES LEXICOS deliberados» "
@@ -366,6 +400,25 @@ with pestañas[3]:
         for e in errores:
             st.markdown(f"**Error en fila {e.fila}, columna {e.columna}** — {e.mensaje}")
             st.markdown(html_error(codigo, e), unsafe_allow_html=True)
+
+    st.divider()
+    st.subheader("Verificación estructural (extra, no reemplaza a la entrega 2)")
+    st.caption(
+        "Esto **no** es análisis sintáctico. Es una pila que empareja "
+        "aperturas y cierres de bloque (`hagale_pues`/`ya_quedo`, "
+        "`si_acaso`/`asi_quedo`, `mientras_que`/`hasta_ahi`, "
+        "`pa_cada`/`listo_pues`, `(` `)`, `{` `}`), igual que un "
+        "emparejador de paréntesis. Atrapa el error más común al escribir "
+        "Paisascript a mano — olvidar la palabra de cierre — pero **no** "
+        "detecta violaciones más finas de la gramática (esas las hará el "
+        "parser descendente recursivo de la entrega 2) ni errores "
+        "semánticos de tipos, variables o aridad (esos son de la entrega 3)."
+    )
+    if not chequeo:
+        st.success("Todos los bloques abiertos se cerraron correctamente.")
+    else:
+        for e in chequeo:
+            st.markdown(f"⚠️ **Fila {e.fila}, columna {e.columna}** — {e.mensaje}")
 
 # --- 5. Resumen -------------------------------------------------------------
 with pestañas[4]:
@@ -409,8 +462,66 @@ with pestañas[5]:
         st.info("Todos los tokens de esta entrada se traducen por sustitución "
                 "directa.")
 
-# --- 7. Referencia ----------------------------------------------------------
+# --- 7. Codigo del analizador (para explicar en la sustentacion) -----------
 with pestañas[6]:
+    st.subheader("El analizador léxico, en Python puro")
+    st.caption(
+        "Fragmentos leídos en vivo de `lexer.py` — no son una copia escrita "
+        "a mano, son el archivo real. Ningún fragmento usa Streamlit: es "
+        "exactamente el módulo que también consume `main.py`."
+    )
+
+    _fuente_lexer = (RAIZ / "lexer.py").read_text(encoding="utf-8")
+
+    def _mostrar(titulo_frag: str, explicacion: str, inicio: str, fin: str) -> None:
+        st.markdown(f"##### {titulo_frag}")
+        st.caption(explicacion)
+        try:
+            st.code(extraer_fragmento(_fuente_lexer, inicio, fin), language="python")
+        except ValueError:
+            st.error("No se encontró este fragmento en lexer.py (¿cambió el archivo?).")
+
+    _mostrar(
+        "1 · La tabla de tokens es una lista de (nombre, expresión regular)",
+        "El orden importa: Python usa la PRIMERA alternativa que casa, no la "
+        "más larga. Por eso ** va antes que *, y NUM_REAL antes que NUM_ENTERO.",
+        '_ESPECIFICACION = [',
+        're.DOTALL,\n    )',
+    )
+
+    _mostrar(
+        "2 · El recorrido: una sola pasada con re.finditer",
+        "Fila y columna se llevan a mano. Un error NO detiene el ciclo: se "
+        "registra y se sigue con el siguiente carácter (requisito 14).",
+        'def tokenizar(self) -> List[Token]:',
+        'return self.tokens',
+    )
+
+    _mostrar(
+        "3 · Palabras reservadas: por diccionario, no por regex",
+        "El identificador se reconoce primero por completo (maximal munch) y "
+        "LUEGO se consulta esta tabla. Así pille_puesx es un identificador, "
+        "no la palabra reservada seguida de una x.",
+        'PALABRAS_RESERVADAS = {',
+        '"naranjas":      TipoToken.LIT_FALSO,\n}',
+    )
+
+    _mostrar(
+        "4 · Fila y columna: aritmética simple sobre el lexema",
+        "Si el lexema trae saltos de línea (una cadena multilínea) se "
+        "recalcula la columna desde el último '\\n'; si no, solo se suma su largo.",
+        'def _avanzar(self, lexema: str) -> None:',
+        'self._columna += len(lexema)',
+    )
+
+    with st.expander("Ver lexer.py completo"):
+        st.code(_fuente_lexer, language="python")
+        st.download_button("Descargar lexer.py",
+                           data=_fuente_lexer.encode("utf-8"),
+                           file_name="lexer.py", mime="text/x-python")
+
+# --- 8. Referencia ----------------------------------------------------------
+with pestañas[7]:
     st.subheader("Documentación del lenguaje")
     doc = st.radio("Documento", ["Gramática BNF", "Mapeo a Gleam", "README"],
                    horizontal=True)
