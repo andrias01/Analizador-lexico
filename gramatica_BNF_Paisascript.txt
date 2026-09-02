@@ -613,7 +613,7 @@ unico token de anticipacion, sin retroceso.
     pille_pues z = 3.             // NUM_REAL exige digitos a ambos lados
     hable_pues(a $ b)             // '$' no pertenece al alfabeto del lenguaje
 
---- 6.2 Errores SINTACTICOS (los detectara el parser de la entrega 2) ---------
+--- 6.2 Errores SINTACTICOS (los detectara el analizador sintactico) ---------
 
     si_acaso x > 3 entonces_pues        // falta asi_quedo
         hable_pues("hola")
@@ -803,9 +803,9 @@ es un subconjunto de lo que Gleam puede expresar.
 
   Analisis lexico        lexer.py + main.py                ENTREGA 1 completo
   Gramatica BNF LL(1)    este documento                    ENTREGA 1 completo
-  Analisis sintactico    parser descendente recursivo      entrega 2
-  Analisis semantico     tabla de simbolos, tipos Int/Float entrega 3
-  Generacion de codigo   emisor de Gleam                   entrega final
+  Analisis sintactico    parser descendente recursivo      pendiente
+  Analisis semantico     tabla de simbolos, tipos Int/Float pendiente
+  Generacion de codigo   emisor de Gleam                   pendiente
 
 El detalle completo de la traduccion, con ejemplos trabajados de punta a
 punta, esta en el documento MAPEO_GLEAM.md.

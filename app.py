@@ -29,6 +29,15 @@ from mapeo_gleam import equivalente, es_directo
 
 RAIZ = Path(__file__).parent
 
+# El cuadro "en vivo" es un componente HTML/JS propio (ver
+# componente_entrada_viva.py); si algo en el entorno impide cargarlo, la app
+# sigue funcionando con el st.text_area clásico, sin romperse.
+try:
+    from componente_entrada_viva import area_texto_viva
+    _ENTRADA_VIVA_DISPONIBLE = True
+except Exception:
+    _ENTRADA_VIVA_DISPONIBLE = False
+
 
 # =============================================================================
 #  CONFIGURACION Y ESTILOS
@@ -244,12 +253,40 @@ if modo == "Cadena predefinida":
     titulo_fuente = elegido
 
 elif modo == "Cadena libre":
-    codigo = st.sidebar.text_area(
-        "Escriba su código Paisascript",
-        value="pille_pues numerito x = 10 % 3 ** 2\n"
-              'hable_pues("El resultado es: " <> x)',
-        height=260,
+    if "codigo_libre" not in st.session_state:
+        st.session_state.codigo_libre = (
+            'pille_pues numerito x = 10 % 3 ** 2\n'
+            'hable_pues("El resultado es: " <> x)'
+        )
+
+    en_vivo = _ENTRADA_VIVA_DISPONIBLE and st.sidebar.toggle(
+        "⚡ Analizar en vivo (beta, cada tecla)",
+        value=False,
+        help="Experimental: manda el texto a analizar con cada tecla, sin "
+             "esperar Ctrl+Enter ni a que salga del cuadro. Es un "
+             "componente propio, no viene con Streamlit — si en su "
+             "navegador no reacciona, desactive esto y use el cuadro "
+             "clásico de abajo.",
     )
+
+    if en_vivo:
+        st.session_state.codigo_libre = area_texto_viva(
+            st.session_state.codigo_libre, altura=260, key="area_viva",
+        )
+    else:
+        st.session_state.codigo_libre = st.sidebar.text_area(
+            "Escriba su código Paisascript",
+            value=st.session_state.codigo_libre,
+            height=260,
+            key="area_clasica",
+        )
+        st.sidebar.button("🔎 Analizar ahora", width="stretch")
+        st.sidebar.caption(
+            "No hace falta Ctrl+Enter: al hacer clic en cualquier otro "
+            "lugar (este botón, una pestaña) ya se vuelve a analizar."
+        )
+
+    codigo = st.session_state.codigo_libre
     titulo_fuente = "cadena digitada"
 
 else:
@@ -311,7 +348,7 @@ if chequeo:
         f"Además, el chequeo estructural encontró **{len(chequeo)} bloque(s) "
         "sin cerrar bien** (ver pestaña «Errores y verificación»). Esto es "
         "un aviso adicional, no reemplaza al analizador sintáctico completo "
-        "de la entrega 2."
+        "del proyecto."
     )
 
 with st.expander("Ver / editar el código fuente", expanded=False):
@@ -345,7 +382,7 @@ with pestañas[1]:
     st.markdown(html_leyenda(), unsafe_allow_html=True)
     st.markdown(html_fichas(tokens), unsafe_allow_html=True)
     st.caption("Esta es exactamente la lista que consumirá el analizador "
-               "sintáctico descendente recursivo de la entrega 2.")
+               "sintáctico descendente recursivo del proyecto.")
 
 # --- 3. Tabla de simbolos ---------------------------------------------------
 with pestañas[2]:
@@ -402,7 +439,7 @@ with pestañas[3]:
             st.markdown(html_error(codigo, e), unsafe_allow_html=True)
 
     st.divider()
-    st.subheader("Verificación estructural (extra, no reemplaza a la entrega 2)")
+    st.subheader("Verificación estructural (extra, no reemplaza al analizador sintáctico)")
     st.caption(
         "Esto **no** es análisis sintáctico. Es una pila que empareja "
         "aperturas y cierres de bloque (`hagale_pues`/`ya_quedo`, "
@@ -411,8 +448,8 @@ with pestañas[3]:
         "emparejador de paréntesis. Atrapa el error más común al escribir "
         "Paisascript a mano — olvidar la palabra de cierre — pero **no** "
         "detecta violaciones más finas de la gramática (esas las hará el "
-        "parser descendente recursivo de la entrega 2) ni errores "
-        "semánticos de tipos, variables o aridad (esos son de la entrega 3)."
+        "parser descendente recursivo completo) ni errores "
+        "semánticos de tipos, variables o aridad (esos los hará el analizador semántico)."
     )
     if not chequeo:
         st.success("Todos los bloques abiertos se cerraron correctamente.")

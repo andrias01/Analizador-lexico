@@ -9,7 +9,7 @@ Expone tres cosas y nada mas:
     Token       lexema + tipo + fila + columna (+ valor semantico)
     Lexer       la clase que convierte texto en una lista de Token
 
-El analizador sintactico descendente recursivo de la entrega 2 podra
+El analizador sintactico descendente recursivo del proyecto podra
 consumir `Lexer(fuente).tokenizar()` sin modificar una sola linea de este
 archivo. Por eso el manejo de errores no aborta: los errores se acumulan
 en `Lexer.errores` y el recorrido continua con el siguiente caracter.

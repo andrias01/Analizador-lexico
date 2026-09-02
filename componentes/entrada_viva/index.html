@@ -1,0 +1,125 @@
+<!-- entrada_viva/index.html
+     Componente estatico de Streamlit (sin React, sin npm, sin CDN) que
+     devuelve el contenido de un <textarea> a Python en CADA pulsacion de
+     tecla, en vez de esperar a que el usuario pierda el foco o presione
+     Ctrl+Enter (que es como se comporta st.text_area de forma nativa).
+
+     Implementa a mano el protocolo publico de componentes de Streamlit
+     (window.postMessage con los tipos streamlit:componentReady,
+     streamlit:render y streamlit:setComponentValue). Es el mismo protocolo
+     que usa streamlit-component-lib por debajo; no hace falta esa libreria
+     para un componente tan simple como este. -->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  textarea {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    resize: none;
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #282c34;
+    color: #dcdfe4;
+    font-family: "Cascadia Code", "Consolas", "SF Mono", monospace;
+    font-size: 13.5px;
+    line-height: 1.55;
+    outline: none;
+  }
+  textarea:focus { border-color: #c678dd; }
+</style>
+</head>
+<body>
+<textarea id="caja" spellcheck="false" placeholder="Escriba su código Paisascript..."></textarea>
+<script>
+(function () {
+  var caja = document.getElementById("caja");
+  var alturaFijada = false;
+  var temporizador = null;
+  var ultimoValorEnviado = null;
+
+  function enviar(valor) {
+    if (valor === ultimoValorEnviado) return;
+    ultimoValorEnviado = valor;
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:setComponentValue",
+      value: valor,
+      dataType: "json",
+    }, "*");
+  }
+
+  function fijarAltura(px) {
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:setFrameHeight",
+      height: px,
+    }, "*");
+  }
+
+  // Debounce corto: se siente "en vivo" sin disparar un rerun de Streamlit
+  // en cada tecla individual.
+  caja.addEventListener("input", function () {
+    clearTimeout(temporizador);
+    temporizador = setTimeout(function () {
+      enviar(caja.value);
+    }, 350);
+  });
+
+  // Al perder el foco se envia de inmediato, sin esperar el debounce.
+  caja.addEventListener("blur", function () {
+    clearTimeout(temporizador);
+    enviar(caja.value);
+  });
+
+  window.addEventListener("message", function (evento) {
+    var datos = evento.data;
+    if (!datos || datos.type !== "streamlit:render") return;
+
+    var args = datos.args || {};
+    if (typeof args.altura === "number" && !alturaFijada) {
+      document.body.style.height = args.altura + "px";
+      fijarAltura(args.altura);
+      alturaFijada = true;
+    }
+    // Solo se pisa el textarea si (a) Python trae un valor DISTINTO al que
+    // ya hay en pantalla Y (b) la caja NO tiene el foco en este momento.
+    //
+    // El (b) es el que de verdad importa: asignar .value SIEMPRE colapsa el
+    // cursor al final y borra cualquier seleccion, así el string sea
+    // identico. Como cada tecla hace un viaje de ida y vuelta a Python, la
+    // respuesta llega cuando la persona ya siguio escribiendo o esta
+    // seleccionando texto para copiarlo — sin este guardado, ese eco tardio
+    // le pisaba el cursor y le arruinaba la seleccion en cada tecla.
+    // Mientras la caja este enfocada, lo que hay en pantalla manda; solo se
+    // sincroniza desde Python al montar el componente o cuando se vuelve a
+    // esta pestaña sin tener el foco puesto ahi.
+    if (
+      typeof args.valor === "string" &&
+      args.valor !== caja.value &&
+      document.activeElement !== caja
+    ) {
+      caja.value = args.valor;
+      ultimoValorEnviado = args.valor;
+    }
+    if (typeof args.placeholder === "string") {
+      caja.setAttribute("placeholder", args.placeholder);
+    }
+  });
+
+  window.addEventListener("load", function () {
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:componentReady",
+      apiVersion: 1,
+    }, "*");
+    fijarAltura(280);
+  });
+})();
+</script>
+</body>
+</html>

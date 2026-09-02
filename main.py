@@ -3,8 +3,8 @@
 main.py — Interfaz de consola del analizador lexico de Paisascript.
 
 Toda la logica de analisis vive en `lexer.py`; este archivo solo presenta.
-Esa separacion es el requisito 15 del enunciado: el analizador sintactico de
-la entrega 2 reutilizara `lexer.py` sin tocar una linea de esta interfaz.
+Esa separacion es el requisito 15 del enunciado: el analizador sintactico
+reutilizara `lexer.py` sin tocar una linea de esta interfaz.
 
 Ejecutar:  python main.py
 """

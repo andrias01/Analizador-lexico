@@ -10,6 +10,8 @@ palabras reservadas provienen de la jerga paisa (Antioquia, Colombia). Es el
 Este repositorio contiene la **Entrega 1** del curso de Teoría de Compiladores:
 la gramática libre de contexto en notación BNF y el analizador léxico.
 
+🔗 **App en vivo:** [compiladorlex.streamlit.app](https://compiladorlex.streamlit.app/)
+
 ---
 
 ## Tabla de contenidos
@@ -46,6 +48,10 @@ py -3.12 -m streamlit run app.py
 
 ### Publicar en Streamlit Community Cloud
 
+Ya está desplegada en **[compiladorlex.streamlit.app](https://compiladorlex.streamlit.app/)**.
+Se redespliega sola con cada `git push` a la rama conectada. Para publicarla
+de cero en otra cuenta:
+
 La app no usa disco ni estado de servidor, así que se despliega sin cambios:
 
 1. Subir el repositorio a GitHub (`git push`).
@@ -74,7 +80,13 @@ Ambas interfaces ofrecen los mismos tres (requisito 11 del enunciado):
    ambos bucles, calce de patrones, identificadores con tildes y un caso con
    errores léxicos deliberados.
 2. **Cadena libre** — se escribe el código directamente. En consola se termina
-   con una línea que diga `fin`.
+   con una línea que diga `fin`. En la web, el cuadro clásico se analiza al
+   salir de él (clic afuera, Ctrl+Enter, o el botón «Analizar ahora»); hay
+   además un modo **«⚡ Analizar en vivo (beta)»** que reanaliza con cada
+   tecla, usando un componente propio (`componente_entrada_viva.py` +
+   `componentes/entrada_viva/index.html`) sin dependencias externas. Si no
+   reacciona en algún navegador, se apaga el interruptor y queda el cuadro
+   clásico, que es el que se prueba automáticamente en CI.
 3. **Archivo `.paisa`** — se sube o se indica la ruta.
 
 ### Qué muestra
@@ -120,7 +132,7 @@ app.py   (web, Streamlit) ──┘     (sin cambios)
 
 Esa independencia **es** el requisito 15 del enunciado, y aquí está demostrada
 en la práctica: `app.py` se construyó después, sin modificar una sola línea de
-`lexer.py`. El analizador sintáctico de la entrega 2 será un tercer consumidor.
+`lexer.py`. El analizador sintáctico del proyecto será un tercer consumidor.
 
 ---
 
@@ -245,8 +257,8 @@ pillemos resultado {
 ## Arquitectura del lexer
 
 `lexer.py` es **independiente de la interfaz** (requisito 15 del enunciado): no
-imprime ni lee nada. El parser descendente recursivo de la entrega 2 podrá
-consumirlo sin modificarlo.
+imprime ni lee nada. El futuro parser descendente recursivo podrá consumirlo
+sin modificarlo.
 
 ```python
 from lexer import Lexer

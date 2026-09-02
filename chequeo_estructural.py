@@ -2,20 +2,20 @@
 """
 chequeo_estructural.py — Verificacion RAPIDA de balanceo de bloques.
 
-Esto NO es el analizador sintactico de la entrega 2. El parser real sera un
-descendente recursivo completo, guiado por cada produccion de la gramatica
-BNF (gramatica_BNF_Paisascript.txt), y detectara cualquier violacion de esa
-gramatica. Esto es apenas una pasada extra sobre los tokens, tan simple como
-emparejar parentesis, pensada para atrapar el error mas comun al escribir
-Paisascript a mano: olvidar la palabra que cierra un bloque (asi_quedo,
-hasta_ahi, listo_pues, ya_quedo) o dejar un parentesis o una llave sin cerrar.
+Esto NO es el analizador sintactico completo del proyecto. El parser real
+sera un descendente recursivo completo, guiado por cada produccion de la
+gramatica BNF (gramatica_BNF_Paisascript.txt), y detectara cualquier
+violacion de esa gramatica. Esto es apenas una pasada extra sobre los
+tokens, tan simple como emparejar parentesis, pensada para atrapar el error
+mas comun al escribir Paisascript a mano: olvidar la palabra que cierra un
+bloque (asi_quedo, hasta_ahi, listo_pues, ya_quedo) o dejar un parentesis o
+una llave sin cerrar.
 
 Por diseno NO detecta:
   - errores de gramatica mas finos, como un "sino_pues" repetido o un
-    "pa_cada" sin "desde"  (eso lo hara el parser de la entrega 2)
+    "pa_cada" sin "desde"  (eso lo hara el analizador sintactico completo)
   - errores semanticos: tipos incompatibles, variables no declaradas,
-    aridad incorrecta en una llamada  (eso lo hara el analizador semantico
-    de la entrega 3)
+    aridad incorrecta en una llamada  (eso lo hara el analizador semantico)
 
 El algoritmo es una pila: cada apertura se apila; cada cierre busca su
 apertura correspondiente empezando por el tope. Es O(n) y sin retroceso,

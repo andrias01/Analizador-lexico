@@ -344,7 +344,7 @@ función y `main` es el punto de entrada del módulo.
 | :--- | :--- | :--- |
 | Análisis léxico | `lexer.py`, `main.py` | **Entrega 1 — completo** |
 | Gramática BNF LL(1) | `gramatica_BNF_Paisascript.txt` | **Entrega 1 — completo** |
-| Análisis sintáctico | parser descendente recursivo | pendiente (entrega 2) |
+| Análisis sintáctico | parser descendente recursivo | pendiente |
 | Análisis semántico | tabla de símbolos, inferencia `Int`/`Float` | pendiente (entrega 3) |
 | Generación de código | emisor de Gleam | pendiente (entrega final) |
 
