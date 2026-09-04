@@ -279,6 +279,14 @@ class Lexer:
         # <> solo (dos caracteres) NO casa aqui y sigue siendo OP_CONCAT.
         ("ANGULOS_INVALIDOS", r"[<>]{3,}|>>|<<"),
 
+        # Tres o mas iguales seguidos (===, ====) no son un operador. Va ANTES
+        # que OP_ASIGNACION, que solo reconoce un '=' suelto.
+        ("IGUALES_INVALIDOS", r"={3,}"),
+
+        # Dos o mas porcentajes seguidos (%%, %%%) tampoco. El residuo se
+        # escribe con un solo '%'. Va ANTES que OP_MODULO.
+        ("PORCENTAJES_INVALIDOS", r"%{2,}"),
+
         # Operadores de dos caracteres, antes que los de uno.
         ("OP_POTENCIA",      r"\*\*"),
         ("OP_CONCAT",        r"<>"),
@@ -424,6 +432,16 @@ class Lexer:
         self._error(lexema, fila, columna,
                     f"'{lexema}' no es un operador valido; use '<>' para "
                     f"concatenar y '<', '>', '<=', '>=' para comparar")
+
+    def _t_IGUALES_INVALIDOS(self, lexema: str, fila: int, columna: int) -> None:
+        self._error(lexema, fila, columna,
+                    f"'{lexema}' no es un operador valido; use '=' para "
+                    f"asignar e 'igualito' para comparar igualdad")
+
+    def _t_PORCENTAJES_INVALIDOS(self, lexema: str, fila: int, columna: int) -> None:
+        self._error(lexema, fila, columna,
+                    f"'{lexema}' no es un operador valido; el residuo se "
+                    f"escribe con un solo '%'")
 
     def _t_CARACTER_INVALIDO(self, lexema: str, fila: int, columna: int) -> None:
         self._error(lexema, fila, columna,
