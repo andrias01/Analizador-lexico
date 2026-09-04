@@ -272,6 +272,13 @@ class Lexer:
         # inadvertido por el lexer (maximal munch sobre el asterisco).
         ("ASTERISCOS_INVALIDOS", r"\*{3,}"),
 
+        # Lo mismo con los angulos: el unico par valido es <> (concatenacion).
+        # Cualquier racha de tres o mas (>>>, <<<, <>>, <<>) y los pares >> y
+        # << no son operadores del lenguaje. Va ANTES que OP_CONCAT, OP_MENOR
+        # y OP_MAYOR para que la racha se lea completa y no en pedazos.
+        # <> solo (dos caracteres) NO casa aqui y sigue siendo OP_CONCAT.
+        ("ANGULOS_INVALIDOS", r"[<>]{3,}|>>|<<"),
+
         # Operadores de dos caracteres, antes que los de uno.
         ("OP_POTENCIA",      r"\*\*"),
         ("OP_CONCAT",        r"<>"),
@@ -412,6 +419,11 @@ class Lexer:
         self._error(lexema, fila, columna,
                     f"'{lexema}' no es un operador valido; use '*' para "
                     f"multiplicar o '**' para potencia")
+
+    def _t_ANGULOS_INVALIDOS(self, lexema: str, fila: int, columna: int) -> None:
+        self._error(lexema, fila, columna,
+                    f"'{lexema}' no es un operador valido; use '<>' para "
+                    f"concatenar y '<', '>', '<=', '>=' para comparar")
 
     def _t_CARACTER_INVALIDO(self, lexema: str, fila: int, columna: int) -> None:
         self._error(lexema, fila, columna,
