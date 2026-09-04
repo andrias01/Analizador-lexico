@@ -342,7 +342,7 @@ Las traducciones trabajadas de punta a punta están en
 | :--- | :--- |
 | Descripción informal (vocabulario, tipos, alcance) | §1 de la gramática |
 | Conjunto de terminales por categoría | §2 |
-| Producciones sin recursividad izquierda | §3 (46 producciones) |
+| Producciones sin recursividad izquierda | §3 (54 reglas, 108 alternativas) |
 | Verificación de la condición LL(1) | §4 (conjuntos PRIMERO y SIGUIENTE) |
 | Ejemplos de programas válidos e inválidos | §5 y §6 |
 | Justificación de coherencia con el destino | §7 y `MAPEO_GLEAM.md` |
@@ -372,4 +372,4 @@ Las traducciones trabajadas de punta a punta están en
 | 8 | Definición de funciones (destino de scripting/funcional) | ✅ `hagale_pues … ya_quedo` |
 | 9 | Enteros, reales, cadenas y booleanos | ✅ `numerito` `quebradito` `cuento` `siono` |
 | 10 | Asignación y retorno | ✅ `pille_pues` y `entregue_pues` |
-py -3.12 -m streamlit run app.py
+py -3.12 -m streamlit run app.py    

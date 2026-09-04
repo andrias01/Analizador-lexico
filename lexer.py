@@ -267,6 +267,11 @@ class Lexer:
         # (Gleam reserva la mayuscula inicial para los constructores de tipo).
         ("ID_MAYUSCULA",     f"[{_MAYUSCULAS}]" + _ID_RESTO + r"*"),
 
+        # Tres o mas asteriscos seguidos no son un operador de Paisascript.
+        # Va ANTES que OP_POTENCIA: si no, *** se partiria en ** y * y pasaria
+        # inadvertido por el lexer (maximal munch sobre el asterisco).
+        ("ASTERISCOS_INVALIDOS", r"\*{3,}"),
+
         # Operadores de dos caracteres, antes que los de uno.
         ("OP_POTENCIA",      r"\*\*"),
         ("OP_CONCAT",        r"<>"),
@@ -402,6 +407,11 @@ class Lexer:
     def _t_ID_MAYUSCULA(self, lexema: str, fila: int, columna: int) -> None:
         self._error(lexema, fila, columna,
                     "un identificador debe empezar en minuscula o guion bajo")
+
+    def _t_ASTERISCOS_INVALIDOS(self, lexema: str, fila: int, columna: int) -> None:
+        self._error(lexema, fila, columna,
+                    f"'{lexema}' no es un operador valido; use '*' para "
+                    f"multiplicar o '**' para potencia")
 
     def _t_CARACTER_INVALIDO(self, lexema: str, fila: int, columna: int) -> None:
         self._error(lexema, fila, columna,
