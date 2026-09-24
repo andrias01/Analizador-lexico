@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+
+# Secretos: NUNCA deben subirse al repositorio
+.env
+.streamlit/secrets.toml

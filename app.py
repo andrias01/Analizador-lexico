@@ -22,7 +22,7 @@ from tabla_ll1 import obtener_dataframe_tabla, obtener_dataframes_conjuntos
 from parser_ll1 import analisis_predictivo_multi, NodoArbol
 
 # --- IMPORTACIÓN DEL ASISTENTE DE IA ---
-from ai_assistant import analizar_error_con_ia
+from ai_assistant import analizar_error_con_ia, origen_api_key
 
 RAIZ = Path(__file__).parent
 
@@ -458,20 +458,31 @@ st.sidebar.divider()
 st.sidebar.subheader("🤖 Asistente de IA")
 
 with st.sidebar.expander("⚙️ Configuración de API (Opcional)"):
-    st.caption("Por defecto se usa la clave segura del archivo `.env`.")
+    st.caption("Por defecto se usa la clave de los Secrets o del archivo `.env`.")
     api_key_manual = st.text_input(
-        "Clave temporal (OpenAI)", 
-        type="password", 
-        help="Déjalo en blanco para usar la clave de tu entorno."
+        "Clave temporal (OpenAI)",
+        type="password",
+        help="Déjalo en blanco para usar la clave configurada en el despliegue."
     )
 
-# Si el usuario escribe algo, se usa; si no, se envía None y el backend lee el .env
+# Si el usuario escribe algo, se usa; si no, se envía None y el backend la
+# busca primero en st.secrets y luego en las variables de entorno / .env
 api_key_activa = api_key_manual.strip() if api_key_manual else None
 
-if not api_key_activa:
-    st.sidebar.success("✅ Conectado mediante `.env`")
-else:
+if api_key_activa:
     st.sidebar.warning("⚠️ Usando clave temporal manual")
+else:
+    origen = origen_api_key()
+    if origen == "secrets":
+        st.sidebar.success("✅ Conectado mediante Secrets")
+    elif origen == "entorno":
+        st.sidebar.success("✅ Conectado mediante `.env`")
+    else:
+        st.sidebar.error(
+            "❌ Sin clave configurada. Defina `OPENAI_API_KEY` en los Secrets "
+            "de la app (o en `.env` si trabaja en local), o escriba una clave "
+            "temporal arriba."
+        )
 
 # =============================================================================
 #  CUERPO PRINCIPAL
