@@ -1,17 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-app.py — Interfaz web (Streamlit) del analizador lexico de Paisascript.
-
-Es la SEGUNDA interfaz construida sobre el mismo `lexer.py`, sin modificar
-una sola linea de el. Esa es la demostracion practica del requisito 15 del
-enunciado: la logica del analizador esta encapsulada en un modulo
-independiente y reutilizable.
-
-    consola  ->  main.py  --.
-                             >--  lexer.py  (sin cambios)
-    web      ->  app.py   --'
-
-Ejecutar:  streamlit run app.py
+app.py — Interfaz web (Streamlit) del analizador léxico y sintáctico de Paisascript.
 """
 
 from __future__ import annotations
@@ -26,40 +15,51 @@ from chequeo_estructural import verificar_balance
 from ejemplos import EJEMPLOS
 from lexer import Lexer, TipoToken
 from mapeo_gleam import equivalente, es_directo
+from parser import Parser, ErrorSintactico, ErroresSintacticos
+
+# --- IMPORTACIONES NUEVAS PARA ENTREGA 2 (LL1) ---
+from tabla_ll1 import obtener_dataframe_tabla, obtener_dataframes_conjuntos
+from parser_ll1 import analisis_predictivo_multi, NodoArbol
+
+# --- IMPORTACIÓN DEL ASISTENTE DE IA ---
+from ai_assistant import analizar_error_con_ia
 
 RAIZ = Path(__file__).parent
 
-# El cuadro "en vivo" es un componente HTML/JS propio (ver
-# componente_entrada_viva.py); si algo en el entorno impide cargarlo, la app
-# sigue funcionando con el st.text_area clásico, sin romperse.
+# Soporte para entrada en vivo
 try:
     from componente_entrada_viva import area_texto_viva
+
     _ENTRADA_VIVA_DISPONIBLE = True
 except Exception:
     _ENTRADA_VIVA_DISPONIBLE = False
 
+# Soporte condicional para Árbol Gráfico (Graphviz)
+try:
+    from arbol_grafico import generar_grafo_ast, capturar_arbol_ascii
+
+    _ARBOL_GRAFICO_DISPONIBLE = True
+except ImportError:
+    _ARBOL_GRAFICO_DISPONIBLE = False
 
 # =============================================================================
 #  CONFIGURACION Y ESTILOS
 # =============================================================================
 
 st.set_page_config(
-    page_title="Paisascript — Analizador Léxico",
+    page_title="Paisascript — Frontend Compilador",
     page_icon="🪕",
     layout="wide",
 )
 
-# Paleta fija sobre fondo oscuro: no depende del tema claro/oscuro que el
-# usuario tenga configurado en Streamlit, asi que los colores por categoria
-# se ven igual en la sustentacion sin importar la maquina.
 COLORES = {
-    "RESERVADA":     "#c678dd",
-    "TIPO":          "#56b6c2",
-    "OPERADOR":      "#e5c07b",
-    "LITERAL":       "#98c379",
+    "RESERVADA": "#c678dd",
+    "TIPO": "#56b6c2",
+    "OPERADOR": "#e5c07b",
+    "LITERAL": "#98c379",
     "IDENTIFICADOR": "#61afef",
-    "PUNTUACION":    "#8b93a1",
-    "FIN":           "#5c6370",
+    "PUNTUACION": "#8b93a1",
+    "FIN": "#5c6370",
 }
 FONDO = "#282c34"
 TENUE = "#5c6370"
@@ -99,14 +99,167 @@ st.markdown(f"""
 
 
 # =============================================================================
-#  ANALISIS  (cacheado: solo se reanaliza cuando cambia el texto)
+#  ADAPTADOR AST (LL1 a JSON)
+# =============================================================================
+
+def nodo_a_dict(nodo: NodoArbol) -> dict:
+    """Convierte los objetos NodoArbol del LL1 al formato dict/JSON para el gráfico."""
+    if not nodo: return {}
+    d = {"name": nodo.valor, "type": nodo.tipo}
+    if nodo.hijos:
+        d["children"] = [nodo_a_dict(h) for h in nodo.hijos]
+    return d
+
+
+def snapshot_a_grafo(nodo: dict) -> dict:
+    """
+    Convierte un nodo de los pasos del árbol (formato {'tipo','es_terminal','hijos'},
+    el mismo que usan ambos parsers) al esquema {'name','type','children'} que
+    espera generar_grafo_ast/capturar_arbol_ascii (el mismo que produce
+    nodo_a_dict a partir de un NodoArbol).
+    """
+    if not nodo:
+        return {}
+    d = {"name": nodo.get("tipo", ""),
+         "type": "terminal" if nodo.get("es_terminal") else "no_terminal"}
+    hijos = nodo.get("hijos") or []
+    if hijos:
+        d["children"] = [snapshot_a_grafo(h) for h in hijos]
+    return d
+
+
+# =============================================================================
+#  ÁRBOL PASO A PASO (Siguiente / Anterior)
+# =============================================================================
+
+def renderizar_stepper_arbol(pasos: list[dict], key_prefix: str) -> None:
+    """
+    Muestra los pasos de construcción del árbol: primero el diagrama a todo
+    lo ancho, y debajo los controles (Anterior/Siguiente y una barra para
+    saltar directo a un paso), sincronizados entre sí. `pasos` es una lista
+    de dicts {"Paso","Acción","Pila","Entrada","Arbol"}; la vienen
+    produciendo tanto Parser.parse_con_pasos() (método recursivo) como
+    analisis_predictivo_multi() (método LL(1)).
+    """
+    total = len(pasos)
+    if total == 0:
+        st.info("No hay pasos para mostrar.")
+        return
+
+    clave_idx = f"paso_idx_{key_prefix}"
+    clave_slider = f"paso_slider_{key_prefix}"
+    clave_firma = f"paso_firma_{key_prefix}"
+
+    # Si cambió el código/método (y por lo tanto la cantidad de pasos), se
+    # vuelve al primer paso para no quedar apuntando a un índice viejo.
+    firma = f"{key_prefix}:{total}"
+    if st.session_state.get(clave_firma) != firma:
+        st.session_state[clave_firma] = firma
+        st.session_state[clave_idx] = 0
+        st.session_state[clave_slider] = 1
+
+    if clave_idx not in st.session_state:
+        st.session_state[clave_idx] = 0
+    if clave_slider not in st.session_state:
+        st.session_state[clave_slider] = st.session_state[clave_idx] + 1
+
+    idx = min(st.session_state[clave_idx], total - 1)
+
+    # El diagrama debe verse ARRIBA de los controles, pero para dibujar el
+    # paso correcto (sin quedar un clic atrasado) hay que leer primero los
+    # botones/la barra, que están más abajo en el código. Se resuelve con un
+    # contenedor: reserva el espacio de arriba y se rellena al final, ya con
+    # el índice definitivo.
+    zona_grafico = st.container()
+
+    # --- Controles, debajo del diagrama ---
+    c_prev, c_slider, c_next = st.columns([1, 3, 1])
+    with c_prev:
+        if st.button("◀ Anterior", key=f"btn_prev_{key_prefix}",
+                     disabled=(idx <= 0), use_container_width=True):
+            idx = max(0, idx - 1)
+            st.session_state[clave_idx] = idx
+            st.session_state[clave_slider] = idx + 1
+    with c_next:
+        if st.button("Siguiente ▶", key=f"btn_next_{key_prefix}",
+                     disabled=(idx >= total - 1), use_container_width=True):
+            idx = min(total - 1, idx + 1)
+            st.session_state[clave_idx] = idx
+            st.session_state[clave_slider] = idx + 1
+    with c_slider:
+        idx = st.slider("Ir al paso", 1, total, key=clave_slider) - 1
+
+    st.session_state[clave_idx] = idx
+    paso = pasos[idx]
+
+    with zona_grafico:
+        arbol_paso = paso.get("Arbol")
+        if arbol_paso is None:
+            st.info("El árbol de este paso ya no se grabó (programa demasiado largo).")
+        elif _ARBOL_GRAFICO_DISPONIBLE:
+            grafo_dict = snapshot_a_grafo(arbol_paso)
+            try:
+                st.graphviz_chart(generar_grafo_ast(grafo_dict), use_container_width=False)
+            except Exception:
+                st.warning("No se pudo renderizar el gráfico vectorial. Mostrando respaldo ASCII:")
+                st.code(capturar_arbol_ascii(grafo_dict), language=None)
+        else:
+            st.info("Módulo gráfico no disponible.")
+
+    st.caption(f"Paso **{idx + 1} / {total}** — {paso['Acción']}")
+    with st.expander("Ver pila y entrada restante en este paso"):
+        st.code(f"Pila:    {paso['Pila']}\nEntrada: {paso['Entrada']}", language=None)
+
+
+# =============================================================================
+#  ERRORES SINTÁCTICOS (uno o varios)
+# =============================================================================
+
+def texto_errores(lista: list[str]) -> str:
+    """Une los errores sintácticos en un solo texto (numerado si hay varios)."""
+    if len(lista) <= 1:
+        return lista[0] if lista else ""
+    return "\n".join(f"{i}. {m}" for i, m in enumerate(lista, start=1))
+
+
+def _md(texto: str) -> str:
+    """Escapa caracteres que Streamlit interpretaría como Markdown/LaTeX ($, *, _...)."""
+    for ch in ("\\", "*", "_", "`", "$"):
+        texto = texto.replace(ch, "\\" + ch)
+    return texto
+
+
+def mostrar_lista_errores(lista: list[str]) -> None:
+    """Un recuadro por error (numerados cuando hay más de uno)."""
+    if len(lista) == 1:
+        st.error(_md(lista[0]))
+    else:
+        for i, msg in enumerate(lista, start=1):
+            st.error(f"**{i}.** {_md(msg)}")
+
+
+def mostrar_errores_sintacticos(lista: list[str], titulo_uno: str, titulo_varios: str) -> None:
+    """Muestra un título y luego todos los errores sintácticos encontrados."""
+    if not lista:
+        return
+    if len(lista) == 1:
+        st.error(f"{titulo_uno}: {_md(lista[0])}")
+    else:
+        st.error(f"{titulo_varios} ({len(lista)}):")
+        mostrar_lista_errores(lista)
+
+
+# =============================================================================
+#  ANALISIS  (cacheado: reanaliza cuando cambia el texto o el método)
 # =============================================================================
 
 @st.cache_data(show_spinner=False)
-def analizar(codigo: str):
+def analizar(codigo: str, metodo: str):
+    # FASE 1: Análisis Léxico
     lexer = Lexer(codigo)
     tokens = lexer.tokenizar()
     utiles = [t for t in tokens if t.tipo is not TipoToken.FIN_ARCHIVO]
+
     filas = [
         {
             "#": i,
@@ -121,27 +274,54 @@ def analizar(codigo: str):
         }
         for i, t in enumerate(utiles, start=1)
     ]
+
     errores = [
         {"#": i, "Fila": e.fila, "Columna": e.columna,
          "Lexema": e.lexema, "Causa": e.mensaje}
         for i, e in enumerate(lexer.errores, start=1)
     ]
+
     chequeo = verificar_balance(utiles)
+
+    # FASE 2: Análisis Sintáctico (Según método seleccionado)
+    ast = None
+    errores_sint: list[str] = []  # TODOS los errores sintácticos encontrados
+    traza_ll1 = []
+    pasos_arbol: list[dict] = []  # pasos {"Paso","Acción","Pila","Entrada","Arbol"}
+    # para el navegador paso a paso del árbol
+
+    if "Recursivo" in metodo:
+        try:
+            parser = Parser(tokens)
+            ast, pasos_arbol, errores_sint = parser.parse_con_pasos()
+        except Exception as e:
+            ast = None
+            pasos_arbol = []
+            errores_sint = [f"Error interno en el Parser Recursivo: {str(e)}"]
+    else:
+        try:
+            traza, raiz_nodo, es_valido, lista_err = analisis_predictivo_multi(tokens)
+            traza_ll1 = traza
+            pasos_arbol = traza  # cada fila de la traza ya trae la clave "Arbol"
+            ast = nodo_a_dict(raiz_nodo)
+            if not es_valido:
+                errores_sint = list(lista_err)
+        except Exception as e:
+            errores_sint = [f"Error interno en el Parser Predictivo: {str(e)}"]
+
+    # Texto único (numerado) para la IA y para saber si el parser falló
+    error_sintactico = texto_errores(errores_sint) or None
+
     return (utiles, lexer.errores, pd.DataFrame(filas), pd.DataFrame(errores),
-            lexer.resumen_identificadores(), chequeo)
+            lexer.resumen_identificadores(), chequeo, ast, error_sintactico, traza_ll1,
+            errores_sint, pasos_arbol)
 
 
 # =============================================================================
-#  VISTA 1 — CODIGO RESALTADO
+#  VISTAS HTML
 # =============================================================================
 
 def html_codigo(codigo: str, tokens, errores) -> str:
-    """Reimprime el fuente pintando cada lexema segun su categoria.
-
-    Las posiciones se reconstruyen a partir de (fila, columna) de cada token:
-    es la prueba visual de que el lexer sabe exactamente donde empieza y
-    termina cada pieza del texto.
-    """
     marcas: dict[int, list] = {}
     for t in tokens:
         marcas.setdefault(t.fila, []).append(
@@ -179,10 +359,6 @@ def html_leyenda() -> str:
     return f'<div class="leyenda">{"".join(piezas)}</div>'
 
 
-# =============================================================================
-#  VISTA 2 — FLUJO DE TOKENS
-# =============================================================================
-
 def html_fichas(tokens) -> str:
     fichas = []
     for t in tokens:
@@ -195,22 +371,6 @@ def html_fichas(tokens) -> str:
             f'</span>'
         )
     return f'<div class="lienzo" style="line-height:2.2">{"".join(fichas)}</div>'
-
-
-# =============================================================================
-#  VISTA 5 — ERRORES CON CURSOR
-# =============================================================================
-
-def extraer_fragmento(fuente: str, inicio: str, fin: str) -> str:
-    """Recorta `fuente` entre dos marcadores (ambos incluidos).
-
-    Se usa para mostrar fragmentos REALES de lexer.py en la pestaña de
-    código: se leen del archivo en vez de transcribirlos a mano, así el
-    ejemplo nunca se desincroniza del código que de verdad se ejecuta.
-    """
-    i = fuente.index(inicio)
-    j = fuente.index(fin, i) + len(fin)
-    return fuente[i:j]
 
 
 def html_error(codigo: str, e) -> str:
@@ -227,18 +387,22 @@ def html_error(codigo: str, e) -> str:
 
 
 # =============================================================================
-#  BARRA LATERAL — ENTRADA
+#  BARRA LATERAL — ENTRADA Y CONFIGURACIÓN DE IA
 # =============================================================================
 
 st.sidebar.title("🪕 Paisascript")
-st.sidebar.caption("Analizador léxico · destino **Gleam**")
+st.sidebar.caption("Frontend: Análisis Léxico y Sintáctico")
+
+# --- SELECCION DE METODO ---
+metodo_analisis = st.sidebar.radio(
+    "1. Método de Análisis Sintáctico",
+    ["1. Descendente Recursivo", "2. Predictivo LL(1) (Pila)"]
+)
 st.sidebar.divider()
 
 modo = st.sidebar.radio(
-    "Modo de ingreso de la cadena",
+    "2. Modo de ingreso de la cadena",
     ["Cadena predefinida", "Cadena libre", "Archivo .paisa"],
-    help="Requisito 11 del enunciado: digitación libre o selección de una "
-         "lista de cadenas predefinidas.",
 )
 
 codigo = ""
@@ -260,13 +424,8 @@ elif modo == "Cadena libre":
         )
 
     en_vivo = _ENTRADA_VIVA_DISPONIBLE and st.sidebar.toggle(
-        "⚡ Analizar en vivo (beta, cada tecla)",
+        "⚡ Analizar en vivo (beta)",
         value=False,
-        help="Experimental: manda el texto a analizar con cada tecla, sin "
-             "esperar Ctrl+Enter ni a que salga del cuadro. Es un "
-             "componente propio, no viene con Streamlit — si en su "
-             "navegador no reacciona, desactive esto y use el cuadro "
-             "clásico de abajo.",
     )
 
     if en_vivo:
@@ -280,11 +439,7 @@ elif modo == "Cadena libre":
             height=260,
             key="area_clasica",
         )
-        st.sidebar.button("🔎 Analizar ahora", width="stretch")
-        st.sidebar.caption(
-            "No hace falta Ctrl+Enter: al hacer clic en cualquier otro "
-            "lugar (este botón, una pestaña) ya se vuelve a analizar."
-        )
+        st.sidebar.button("🔎 Analizar ahora", use_container_width=True)
 
     codigo = st.session_state.codigo_libre
     titulo_fuente = "cadena digitada"
@@ -298,63 +453,59 @@ else:
         st.sidebar.warning("Suba un archivo para analizar.")
 
 st.sidebar.divider()
-st.sidebar.caption(
-    "`app.py` y `main.py` usan el **mismo** `lexer.py`, sin modificarlo. "
-    "Esa independencia es el requisito 15 del enunciado."
-)
 
+# --- CONFIGURACIÓN DEL ASISTENTE DE IA ---
+st.sidebar.subheader("🤖 Asistente de IA")
+
+with st.sidebar.expander("⚙️ Configuración de API (Opcional)"):
+    st.caption("Por defecto se usa la clave segura del archivo `.env`.")
+    api_key_manual = st.text_input(
+        "Clave temporal (OpenAI)", 
+        type="password", 
+        help="Déjalo en blanco para usar la clave de tu entorno."
+    )
+
+# Si el usuario escribe algo, se usa; si no, se envía None y el backend lee el .env
+api_key_activa = api_key_manual.strip() if api_key_manual else None
+
+if not api_key_activa:
+    st.sidebar.success("✅ Conectado mediante `.env`")
+else:
+    st.sidebar.warning("⚠️ Usando clave temporal manual")
 
 # =============================================================================
-#  CUERPO
+#  CUERPO PRINCIPAL
 # =============================================================================
 
-st.title("Analizador léxico de Paisascript")
+st.title("Frontend Compilador Paisascript")
 
 if not codigo.strip():
     st.info("Elija una cadena predefinida, escriba código o suba un archivo.")
     st.stop()
 
-tokens, errores, tabla, tabla_err, identificadores, chequeo = analizar(codigo)
+(tokens, errores, tabla, tabla_err, identificadores, chequeo, ast, error_sintactico,
+ traza_ll1, errores_sint, pasos_arbol) = analizar(codigo, metodo_analisis)
 
-# --- Metricas ---------------------------------------------------------------
-c1, c2, c3, c4, c5, c6 = st.columns(6)
-c1.metric("Tokens", len(tokens))
-c2.metric("Errores léxicos", len(errores),
-          delta=None if not errores else f"{len(errores)} sin abortar",
+# --- Metricas ---
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Tokens Validos", len(tokens))
+c2.metric("Errores Léxicos", len(errores), delta=None if not errores else f"{len(errores)} fallos",
           delta_color="inverse")
-c3.metric("Avisos estructurales", len(chequeo),
-          delta=None if not chequeo else "bloques sin cerrar",
+c3.metric("Líneas", codigo.count("\n") + 1)
+estado_parser = "Exitoso" if not error_sintactico else "Fallido"
+n_err_sint = len(errores_sint)
+c4.metric("Parser", estado_parser,
+          delta=None if not n_err_sint else f"{n_err_sint} {'error' if n_err_sint == 1 else 'errores'}",
           delta_color="inverse")
-c4.metric("Líneas", codigo.count("\n") + 1)
-c5.metric("Identificadores", len(identificadores))
-c6.metric("Reservadas",
-          sum(1 for t in tokens if t.categoria in ("RESERVADA", "TIPO")))
-
-if errores:
-    st.warning(
-        f"Se detectaron **{len(errores)} error(es) léxico(s)**. "
-        "El análisis **no se detuvo**: los tokens siguientes se reconocieron "
-        "igual (requisito 14)."
-    )
-else:
-    st.success(
-        "Sin errores léxicos: todo carácter de la entrada forma parte de un "
-        "token válido. *(Esto no revisa la gramática ni los tipos — ver más "
-        "abajo y la pestaña «Errores y verificación».)*"
-    )
-
-if chequeo:
-    st.warning(
-        f"Además, el chequeo estructural encontró **{len(chequeo)} bloque(s) "
-        "sin cerrar bien** (ver pestaña «Errores y verificación»). Esto es "
-        "un aviso adicional, no reemplaza al analizador sintáctico completo "
-        "del proyecto."
-    )
 
 with st.expander("Ver / editar el código fuente", expanded=False):
     st.code(codigo, language=None)
 
+# Pestañas de la aplicación
 pestañas = st.tabs([
+    "Árbol Sintáctico (AST)",
+    "Traza de Pila LL(1)",
+    "Tablas LL(1) / Conjuntos",
     "Código segmentado",
     "Flujo de tokens",
     "Tabla de símbolos",
@@ -365,203 +516,156 @@ pestañas = st.tabs([
     "Referencia",
 ])
 
-# --- 1. Codigo segmentado ---------------------------------------------------
+# --- Pestaña: Árbol Sintáctico (AST) ---
 with pestañas[0]:
+    st.subheader(f"Árbol de Análisis Sintáctico — {metodo_analisis}")
+
+    if error_sintactico:
+        mostrar_errores_sintacticos(
+            errores_sint,
+            "No se pudo completar el AST debido a un error de sintaxis",
+            "No se pudo completar el AST debido a errores de sintaxis",
+        )
+
+        # Botón integrado de IA en caso de error sintáctico
+        st.divider()
+        st.markdown("### ✨ Asistente de IA para Corrección")
+        if st.button("🤖 Analizar error sintáctico con Inteligencia Artificial", key="btn_ia_ast"):
+            with st.spinner("El asistente de IA está analizando tu código y el fallo..."):
+                detalle_fallo = f"Errores sintácticos en el Parser ({len(errores_sint)}):\n{error_sintactico}"
+                sugerencia = analizar_error_con_ia(codigo, detalle_fallo, api_key=api_key_activa)
+                st.markdown(sugerencia)
+
+        if pasos_arbol:
+            st.divider()
+            st.markdown("#### Cómo se armó el árbol hasta el error")
+            renderizar_stepper_arbol(pasos_arbol, key_prefix=f"ast_{metodo_analisis}")
+
+    elif ast:
+        st.success("Análisis sintáctico completado con éxito.")
+        renderizar_stepper_arbol(pasos_arbol, key_prefix=f"ast_{metodo_analisis}")
+        with st.expander("Ver JSON completo del árbol final"):
+            st.json(ast)
+
+# --- PESTAÑA: Traza de Pila LL(1) ---
+with pestañas[1]:
+    st.subheader("Algoritmo de Pila Predictivo")
+    if "Predictivo" not in metodo_analisis:
+        st.info("Debe seleccionar el Método 2 (Predictivo LL1) en la barra lateral para ver la traza.")
+    else:
+        if traza_ll1:
+            df_traza = pd.DataFrame(traza_ll1)[["Paso", "Pila", "Entrada", "Acción"]]
+            st.dataframe(df_traza, use_container_width=True, hide_index=True)
+            if error_sintactico:
+                mostrar_errores_sintacticos(
+                    errores_sint,
+                    "Error detectado durante el análisis de pila",
+                    "Errores detectados durante el análisis de pila",
+                )
+        else:
+            st.warning("No se generó traza de pila.")
+
+# --- PESTAÑA: Tablas LL(1) y Conjuntos ---
+with pestañas[2]:
+    st.subheader("Motor Predictivo: Conjuntos y Matriz M[A,a]")
+
+    df_conjuntos = obtener_dataframes_conjuntos()
+    df_tabla_M = obtener_dataframe_tabla()
+
+    st.markdown("#### Conjuntos PRIMERO y SIGUIENTE")
+    st.dataframe(df_conjuntos, use_container_width=True)
+
+    st.markdown("#### Tabla de Análisis Sintáctico M[A, a]")
+    st.dataframe(df_tabla_M, use_container_width=True)
+
+# --- 1. Codigo segmentado ---------------------------------------------------
+with pestañas[3]:
     st.subheader("El fuente dividido en tokens")
     st.markdown(html_leyenda(), unsafe_allow_html=True)
     st.markdown(html_codigo(codigo, tokens, errores), unsafe_allow_html=True)
-    st.caption(
-        "Cada lexema se pinta según su categoría. Las posiciones se "
-        "reconstruyen con la fila y la columna que el lexer guardó en cada "
-        "token, no con un resaltador aparte."
-    )
 
 # --- 2. Flujo de tokens -----------------------------------------------------
-with pestañas[1]:
+with pestañas[4]:
     st.subheader("Secuencia de tokens emitida")
     st.markdown(html_leyenda(), unsafe_allow_html=True)
     st.markdown(html_fichas(tokens), unsafe_allow_html=True)
-    st.caption("Esta es exactamente la lista que consumirá el analizador "
-               "sintáctico descendente recursivo del proyecto.")
 
 # --- 3. Tabla de simbolos ---------------------------------------------------
-with pestañas[2]:
+with pestañas[5]:
     st.subheader("Tabla de símbolos léxicos")
-
     cats = sorted(tabla["Categoría"].unique()) if not tabla.empty else []
     filtro = st.multiselect("Filtrar por categoría", cats, default=cats)
     vista = tabla[tabla["Categoría"].isin(filtro)] if filtro else tabla
 
     st.dataframe(
         vista[["#", "Lexema", "TokenType", "Categoría", "Fila", "Columna", "Valor"]],
-        width="stretch", hide_index=True, height=460,
-    )
-    st.caption(f"{len(vista)} de {len(tabla)} tokens. Lexema, categoría, "
-               "fila y columna, como exige el requisito 13.")
-
-    st.download_button(
-        "Descargar tabla en CSV",
-        data=tabla.to_csv(index=False).encode("utf-8-sig"),
-        file_name="tabla_simbolos.csv",
-        mime="text/csv",
+        use_container_width=True, hide_index=True, height=460,
     )
 
-    if identificadores:
-        st.markdown("##### Identificadores distintos")
-        st.caption("Germen de la tabla de símbolos que llenará el analizador "
-                   "semántico de la entrega 3.")
-        st.dataframe(
-            pd.DataFrame([
-                {"Identificador": n,
-                 "Apariciones": len(p),
-                 "Posiciones (fila:col)": ", ".join(f"{f}:{c}" for f, c in p)}
-                for n, p in sorted(identificadores.items())
-            ]),
-            width="stretch", hide_index=True,
-        )
+# --- 4. Errores y Asistente IA ----------------------------------------------
+with pestañas[6]:
+    st.subheader("Reporte de errores léxicos y sintácticos")
 
-# --- 4. Errores -------------------------------------------------------------
-with pestañas[3]:
-    st.subheader("Reporte de errores léxicos")
-    st.caption(
-        "Esto es lo que exige el requisito 14: caracteres o secuencias que "
-        "no corresponden a **ningún token válido** del lenguaje."
-    )
-    if not errores:
-        st.success("No se encontró ningún error léxico en esta entrada.")
-        st.caption("Pruebe la cadena predefinida «ERRORES LEXICOS deliberados» "
-                   "para ver el reporte en acción.")
+    tiene_problemas = bool(errores) or bool(error_sintactico)
+
+    if not tiene_problemas:
+        st.success("¡Todo melo! No se encontró ningún error léxico ni sintáctico en esta entrada.")
     else:
-        st.dataframe(tabla_err, width="stretch", hide_index=True)
+        if errores:
+            st.markdown("#### ❌ Errores Léxicos")
+            st.dataframe(tabla_err, use_container_width=True, hide_index=True)
+            st.divider()
+            for e in errores:
+                st.markdown(f"**Error en fila {e.fila}, columna {e.columna}** — {e.mensaje}")
+                st.markdown(html_error(codigo, e), unsafe_allow_html=True)
+
+        if errores_sint:
+            st.markdown("#### ❌ Error Sintáctico" if len(errores_sint) == 1
+                        else f"#### ❌ Errores Sintácticos ({len(errores_sint)})")
+            mostrar_lista_errores(errores_sint)
+
         st.divider()
-        for e in errores:
-            st.markdown(f"**Error en fila {e.fila}, columna {e.columna}** — {e.mensaje}")
-            st.markdown(html_error(codigo, e), unsafe_allow_html=True)
+        st.markdown("### 🤖 Diagnóstico y Sugerencia con Inteligencia Artificial")
+        st.markdown(
+            "Deja que la IA examine el código fuente completo y los errores detectados para darte una solución guiada:")
 
-    st.divider()
-    st.subheader("Verificación estructural (extra, no reemplaza al analizador sintáctico)")
-    st.caption(
-        "Esto **no** es análisis sintáctico. Es una pila que empareja "
-        "aperturas y cierres de bloque (`hagale_pues`/`ya_quedo`, "
-        "`si_acaso`/`asi_quedo`, `mientras_que`/`hasta_ahi`, "
-        "`pa_cada`/`listo_pues`, `(` `)`, `{` `}`), igual que un "
-        "emparejador de paréntesis. Atrapa el error más común al escribir "
-        "Paisascript a mano — olvidar la palabra de cierre — pero **no** "
-        "detecta violaciones más finas de la gramática (esas las hará el "
-        "parser descendente recursivo completo) ni errores "
-        "semánticos de tipos, variables o aridad (esos los hará el analizador semántico)."
-    )
-    if not chequeo:
-        st.success("Todos los bloques abiertos se cerraron correctamente.")
-    else:
-        for e in chequeo:
-            st.markdown(f"⚠️ **Fila {e.fila}, columna {e.columna}** — {e.mensaje}")
+        if st.button("✨ Consultar sugerencias de IA para estos errores", key="btn_ia_errores"):
+            with st.spinner("Analizando con el modelo de lenguaje..."):
+                resumen_fallos = f"Errores léxicos: {len(errores)}. Errores sintácticos ({len(errores_sint)}):\n{error_sintactico}"
+                sugerencia_ia = analizar_error_con_ia(codigo, resumen_fallos, api_key=api_key_activa)
+                st.markdown(sugerencia_ia)
 
 # --- 5. Resumen -------------------------------------------------------------
-with pestañas[4]:
+with pestañas[7]:
     st.subheader("Distribución de tokens por categoría")
     conteo = (tabla["Categoría"].value_counts().rename_axis("Categoría")
               .reset_index(name="Tokens"))
     izq, der = st.columns([2, 1])
     izq.bar_chart(conteo.set_index("Categoría"), height=340)
-    der.dataframe(conteo, width="stretch", hide_index=True)
-
-    st.markdown("##### Tokens más frecuentes")
-    top = (tabla.groupby(["Lexema", "TokenType"]).size()
-           .reset_index(name="Veces").sort_values("Veces", ascending=False).head(15))
-    st.dataframe(top, width="stretch", hide_index=True)
+    der.dataframe(conteo, use_container_width=True, hide_index=True)
 
 # --- 6. Traduccion a Gleam --------------------------------------------------
-with pestañas[5]:
+with pestañas[8]:
     st.subheader("En qué se convierte cada token")
-    st.caption(
-        "El lenguaje fuente se diseñó contra un destino concreto. Esta columna "
-        "sale de `mapeo_gleam.py`, el mismo módulo del que partirá el generador "
-        "de código de la entrega final."
-    )
     st.dataframe(
         tabla[["#", "Lexema", "TokenType", "Gleam", "Directo"]],
-        width="stretch", hide_index=True, height=420,
+        use_container_width=True, hide_index=True, height=420,
     )
 
-    no_directos = tabla[tabla["Directo"] != "sí"]
-    if not no_directos.empty:
-        st.warning(
-            f"**{len(no_directos)} token(s)** de esta entrada no tienen "
-            "traducción directa: Gleam no tiene `while`, `for` ni `return`. "
-            "El generador debe reestructurar el árbol a recursión de cola."
-        )
-        st.dataframe(
-            no_directos[["Lexema", "TokenType", "Fila", "Columna", "Gleam"]],
-            width="stretch", hide_index=True,
-        )
-    else:
-        st.info("Todos los tokens de esta entrada se traducen por sustitución "
-                "directa.")
+# --- 7. Codigo del analizador ----------------------------------------------
+with pestañas[9]:
+    st.subheader("El analizador léxico y sintáctico, en Python puro")
+    st.caption("Fragmentos leídos en vivo de los módulos core.")
 
-# --- 7. Codigo del analizador (para explicar en la sustentacion) -----------
-with pestañas[6]:
-    st.subheader("El analizador léxico, en Python puro")
-    st.caption(
-        "Fragmentos leídos en vivo de `lexer.py` — no son una copia escrita "
-        "a mano, son el archivo real. Ningún fragmento usa Streamlit: es "
-        "exactamente el módulo que también consume `main.py`."
-    )
-
-    _fuente_lexer = (RAIZ / "lexer.py").read_text(encoding="utf-8")
-
-    def _mostrar(titulo_frag: str, explicacion: str, inicio: str, fin: str) -> None:
-        st.markdown(f"##### {titulo_frag}")
-        st.caption(explicacion)
-        try:
-            st.code(extraer_fragmento(_fuente_lexer, inicio, fin), language="python")
-        except ValueError:
-            st.error("No se encontró este fragmento en lexer.py (¿cambió el archivo?).")
-
-    _mostrar(
-        "1 · La tabla de tokens es una lista de (nombre, expresión regular)",
-        "El orden importa: Python usa la PRIMERA alternativa que casa, no la "
-        "más larga. Por eso ** va antes que *, y NUM_REAL antes que NUM_ENTERO.",
-        '_ESPECIFICACION = [',
-        're.DOTALL,\n    )',
-    )
-
-    _mostrar(
-        "2 · El recorrido: una sola pasada con re.finditer",
-        "Fila y columna se llevan a mano. Un error NO detiene el ciclo: se "
-        "registra y se sigue con el siguiente carácter (requisito 14).",
-        'def tokenizar(self) -> List[Token]:',
-        'return self.tokens',
-    )
-
-    _mostrar(
-        "3 · Palabras reservadas: por diccionario, no por regex",
-        "El identificador se reconoce primero por completo (maximal munch) y "
-        "LUEGO se consulta esta tabla. Así pille_puesx es un identificador, "
-        "no la palabra reservada seguida de una x.",
-        'PALABRAS_RESERVADAS = {',
-        '"naranjas":      TipoToken.LIT_FALSO,\n}',
-    )
-
-    _mostrar(
-        "4 · Fila y columna: aritmética simple sobre el lexema",
-        "Si el lexema trae saltos de línea (una cadena multilínea) se "
-        "recalcula la columna desde el último '\\n'; si no, solo se suma su largo.",
-        'def _avanzar(self, lexema: str) -> None:',
-        'self._columna += len(lexema)',
-    )
+    _fuente_lexer = (RAIZ / "lexer.py").read_text(encoding="utf-8") if (RAIZ / "lexer.py").exists() else "No encontrado"
 
     with st.expander("Ver lexer.py completo"):
         st.code(_fuente_lexer, language="python")
-        st.download_button("Descargar lexer.py",
-                           data=_fuente_lexer.encode("utf-8"),
-                           file_name="lexer.py", mime="text/x-python")
 
 # --- 8. Referencia ----------------------------------------------------------
-with pestañas[7]:
+with pestañas[10]:
     st.subheader("Documentación del lenguaje")
-    doc = st.radio("Documento", ["Gramática BNF", "Mapeo a Gleam", "README"],
-                   horizontal=True)
+    doc = st.radio("Documento", ["Gramática BNF", "Mapeo a Gleam", "README"], horizontal=True)
     archivo = {"Gramática BNF": "gramatica_BNF_Paisascript.txt",
                "Mapeo a Gleam": "MAPEO_GLEAM.md",
                "README": "README.md"}[doc]
@@ -572,7 +676,5 @@ with pestañas[7]:
             st.markdown(texto)
         else:
             st.text(texto)
-        st.download_button(f"Descargar {archivo}", data=texto.encode("utf-8"),
-                           file_name=archivo, mime="text/plain")
     else:
         st.error(f"No se encontró {archivo} junto a app.py.")

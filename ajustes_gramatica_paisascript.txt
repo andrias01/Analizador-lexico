@@ -1,0 +1,120 @@
+================================================================================
+  DOCUMENTO DE INFORMES Y AJUSTES - GRAMÁTICA PAISASCRIPT
+  Análisis Comparativo entre la Especificación BNF y la Implementación LL(1)
+================================================================================
+
+1. INTRODUCCIÓN Y PROPÓSITO
+--------------------------------------------------------------------------------
+El presente documento detalla las modificaciones y adaptaciones aplicadas a la 
+gramática del lenguaje PaisaScript. Dichos ajustes permitieron transformar la 
+especificación BNF teórica inicial (definida en `gramatica_BNF_Paisascript.txt`) 
+en una estructura completamente ejecutable y validada bajo la condición LL(1) 
+(implementada en `tabla_ll1_2.py`).
+
+El objetivo principal de estas adaptaciones fue eliminar cualquier ambigüedad, 
+garantizar el correcto cálculo dinámico de los conjuntos PRIMERO y SIGUIENTE, 
+y permitir la construcción automática de la tabla de análisis sintáctico M[A, a] 
+sin conflictos.
+
+
+2. PRINCIPALES AJUSTES REALIZADOS
+--------------------------------------------------------------------------------
+
+2.1. Factorización por la Izquierda en Sentencias (<sent_asignacion_o_llamada>)
+  - Situación Inicial (BNF): 
+    La BNF original definía `<sent_llamada>` de forma independiente iniciando 
+    con `IDENTIFICADOR`. Sin embargo, en el nivel de sentencia no existía una 
+    regla explícita factorizada para sentencias que iniciaran directamente con 
+    un identificador (como reasignación o llamada).
+  
+  - Ajuste Aplicado: 
+    Se unificó la regla creando las producciones:
+      <sent_asignacion_o_llamada> ::= IDENTIFICADOR <resto_asignacion_llamada>
+      <resto_asignacion_llamada>  ::= PAR_ABRE <argumentos> PAR_CIERRA 
+                                    | OP_ASIGNACION <expresion>
+  
+  - Justificación: 
+    Esto resuelve la ambigüedad al momento de procesar sentencias que inician 
+    con un `IDENTIFICADOR`. El parser consume primero el identificador y, con 
+    un solo token de anticipación (1-lookahead), decide si se trata de una 
+    llamada a función (si ve `PAR_ABRE`) o de una asignación (si ve 
+    `OP_ASIGNACION`).
+
+2.2. Normalización de Símbolos Terminales a Nombre de Tokens
+  - Situación Inicial (BNF): 
+    En el documento textual se mezclaban palabras reservadas en texto plano con 
+    símbolos literales entre comillas (por ejemplo: `"("`, `")"`, `"{"`, `"}"`, 
+    `","`, `"="`, `"+"`, `">="`).
+  
+  - Ajuste Aplicado: 
+    En la implementación en Python todos los símbolos terminales se reemplazaron 
+    por sus nombres formales de Token definidos por el Analizador Léxico:
+      - Delimitadores: `PAR_ABRE`, `PAR_CIERRA`, `LLAVE_ABRE`, `LLAVE_CIERRA`, `COMA`
+      - Operadores: `OP_ASIGNACION`, `OP_SUMA`, `OP_RESTA`, `OP_MULT`, `OP_DIV`, 
+                    `OP_MODULO`, `OP_POTENCIA`, `OP_CONCAT`, `OP_IGUAL`, 
+                    `OP_DISTINTO`, `OP_MAYOR`, `OP_MENOR`, `OP_MAYOR_IGUAL`, 
+                    `OP_MENOR_IGUAL`, `OP_Y`, `OP_O`, `OP_NO`
+      - Palabras Reservadas: `KW_FUNCION`, `KW_FIN_FUNCION`, `KW_DECLARACION`, 
+                             `KW_SI`, `KW_SINO`, `KW_MIENTRAS`, `KW_PARA`, etc.
+      - Literales y Comodín: `LIT_VERDADERO`, `LIT_FALSO`, `COMODIN`
+  
+  - Justificación: 
+    Asegura la integración directa entre la salida del Lexer y las entradas del 
+    Parser LL(1), estandarizando la tabla M[A, a].
+
+2.3. Estandarización de la Cadena Vacía (Épsilon)
+  - Situación Inicial (BNF): 
+    Se utilizaba la letra minúscula "e" para representar la cadena vacía.
+  
+  - Ajuste Aplicado: 
+    Se adoptó el carácter griego "ε" en el diccionario `GRAMATICA_BNF`.
+  
+  - Justificación: 
+    Evita colisiones entre el símbolo nulo y nombres de variables o identificadores 
+    y facilita el cálculo programático de conjuntos anulables.
+
+2.4. Mantenimiento y Verificación de la Jerarquía de Expresiones
+  - Se confirmó la eliminación total de la recursividad por la izquierda en 
+    las expresiones mediante la transformación estándar:
+      A ::= B A'  /  A' ::= op B A' | ε
+  
+  - La jerarquía de precedencia (de menor a mayor) quedó representada en la 
+    tabla como:
+      1. Disyunción (<expr_o>, <expr_o_p>)
+      2. Conjunción (<expr_y>, <expr_y_p>)
+      3. Igualdad (<expr_igualdad>, <expr_igualdad_p>)
+      4. Relacionales (<expr_relacional>, <expr_relacional_p>)
+      5. Concatenación (<expr_concat>, <expr_concat_p>)
+      6. Suma/Resta (<expr_aditiva>, <expr_aditiva_p>)
+      7. Multiplicación/División/Módulo (<expr_multiplicativa>, <expr_multiplicativa_p>)
+      8. Potencia (<expr_potencia>, <expr_potencia_p>) - asociativa a la derecha
+      9. Unarios (<expr_unaria>)
+      10. Primarias (<expr_primaria>, <sufijo_id>)
+
+2.5. Factorización de Identificadores en Expresiones Primarias
+  - En `<expr_primaria>`, los identificadores utilizan `<sufijo_id>`:
+      <expr_primaria> ::= IDENTIFICADOR <sufijo_id> | ...
+      <sufijo_id>     ::= PAR_ABRE <argumentos> PAR_CIERRA | ε
+  
+  - Justificación: 
+    Permite diferenciar el acceso a una variable simple de la evaluación de una 
+    llamada a función que retorna valor dentro de una expresión, sin requerir 
+    backtracking.
+
+
+3. RESUMEN DE COMPROBACIÓN LL(1)
+--------------------------------------------------------------------------------
+Tras aplicar estos cambios en `tabla_ll1_2.py`:
+  1. No existen conflictos PRIMERO/PRIMERO.
+  2. No existen conflictos PRIMERO/SIGUIENTE en producciones anulables (que 
+     contienen ε).
+  3. La matriz de análisis predictivo M[A, a] posee como máximo una regla por 
+     cada celda [No Terminal, Terminal].
+
+
+4. CONCLUSIÓN
+--------------------------------------------------------------------------------
+Los ajustes realizados garantizan que la gramática de PaisaScript es 100% LL(1) 
+y apta para ser utilizada por un parser descendente recursivo basado en tabla de 
+sintaxis.
+================================================================================

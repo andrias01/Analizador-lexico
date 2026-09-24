@@ -1,0 +1,132 @@
+// ============================================================================
+// PROGRAMA COMPLETO DE PAISASCRIPT — demostracion integral
+//
+// Este archivo ejercita, a proposito, TODAS las categorias lexicas del
+// lenguaje y TODAS las producciones de la gramatica BNF:
+//
+//   * los 4 tipos:            numerito, quebradito, cuento, siono
+//   * definicion de funciones con y sin "pa_que_lleve", con 0, 1 y 2 parametros
+//   * condicional si_acaso / sino_pues / asi_quedo, incluso anidado
+//   * bucle mientras_que / dele_pues / hasta_ahi
+//   * bucle pa_cada / desde / hasta / de_a / dele_pues / listo_pues
+//   * calce de patrones pillemos { ... } con sus 7 clases de patron y el comodin _
+//   * los 6 operadores aritmeticos: + - * / % **
+//   * concatenacion <> y las 4 comparaciones > < >= <=
+//   * igualito, distinto, y_tambien, o_que, nanai
+//   * literales: enteros, reales, cadenas con escapes, sizas, naranjas
+//   * identificadores con tilde y con enie (requisito 2.1 del enunciado)
+//   * comentarios de linea, como este
+//
+// Es lexicamente correcto: el analizador debe reportar CERO errores.
+// ============================================================================
+
+
+// --- 1. Funcion sin parametros y sin tipo de retorno declarado --------------
+hagale_pues saludar() dele_pues
+    hable_pues("=== Paisascript en accion, parceros ===")
+ya_quedo
+
+
+// --- 2. Un parametro, retorno booleano, uso de % ** y de nanai --------------
+hagale_pues es_primo(numerito n) pa_que_lleve siono dele_pues
+    si_acaso n < 2 entonces_pues
+        entregue_pues naranjas
+    asi_quedo
+
+    pille_pues numerito d = 2
+    mientras_que d ** 2 <= n dele_pues
+        si_acaso n % d igualito 0 entonces_pues
+            entregue_pues naranjas
+        asi_quedo
+        pille_pues d = d + 1
+    hasta_ahi
+
+    entregue_pues nanai naranjas
+ya_quedo
+
+
+// --- 3. Dos parametros de tipos distintos y aritmetica con reales -----------
+hagale_pues promedio_ponderación(quebradito calificación, quebradito peso)
+        pa_que_lleve quebradito dele_pues
+    pille_pues quebradito ajustada = calificación * peso / 100.0
+    si_acaso ajustada > 50.0 entonces_pues
+        entregue_pues 50.0
+    sino_pues
+        entregue_pues ajustada
+    asi_quedo
+ya_quedo
+
+
+// --- 4. Concatenacion de cadenas, escapes y condicional anidado -------------
+hagale_pues clasificar(numerito nota) pa_que_lleve cuento dele_pues
+    si_acaso nota >= 45 y_tambien nota <= 50 entonces_pues
+        entregue_pues "Sobresaliente" <> ", mijo!"
+    sino_pues
+        si_acaso nota >= 30 o_que nota igualito 29 entonces_pues
+            entregue_pues "Pasaste raspando"
+        sino_pues
+            si_acaso nota distinto 0 entonces_pues
+                entregue_pues "Se quemo,\tparcero"
+            sino_pues
+                entregue_pues "Ni presento la \"evaluacion\""
+            asi_quedo
+        asi_quedo
+    asi_quedo
+ya_quedo
+
+
+// --- 5. Bucle pa_cada con paso, resta unaria y division --------------------
+hagale_pues cuenta_regresiva(numerito año) dele_pues
+    pa_cada i desde 10 hasta 1 de_a -1 dele_pues
+        hable_pues("faltan " <> i <> " para el " <> año)
+    listo_pues
+
+    pa_cada j desde 0 hasta 100 dele_pues
+        pille_pues quebradito mitad = j / 2.0
+        hable_pues(mitad)
+    listo_pues
+ya_quedo
+
+
+// --- 6. Calce de patrones: las 7 clases de patron y las 2 formas de cuerpo --
+hagale_pues describir(numerito codigo) pa_que_lleve cuento dele_pues
+    pillemos codigo {
+        0            pa_que_lleve entregue_pues "cero pelao"
+        1            pa_que_lleve entregue_pues "uno"
+        3.1416       pa_que_lleve entregue_pues "eso es pi, no un codigo"
+        "listo"      pa_que_lleve entregue_pues "llego como cadena"
+        sizas        pa_que_lleve entregue_pues "verdadero"
+        naranjas     pa_que_lleve entregue_pues "falso"
+        otro         pa_que_lleve {
+            hable_pues("codigo no catalogado: " <> otro)
+            entregue_pues "desconocido"
+        }
+        _            pa_que_lleve entregue_pues "aqui no llega nadie"
+    }
+ya_quedo
+
+
+// --- 7. Programa principal: lectura, llamadas anidadas y todas las salidas --
+saludar()
+
+escuche_pues(numero)
+pille_pues siono primo = es_primo(numero)
+
+si_acaso primo entonces_pues
+    hable_pues("El numero SI es primo")
+sino_pues
+    hable_pues("El numero NO es primo")
+asi_quedo
+
+pille_pues numerito nota_final = 47
+hable_pues(clasificar(nota_final))
+hable_pues(promedio_ponderación(38.5, 80.0))
+
+cuenta_regresiva(2026)
+
+hable_pues(describir(1))
+hable_pues(describir((2 + 3) * 4 - 5 / 5 % 2))
+
+// Ultima linea: una expresion que usa toda la jerarquia de precedencia.
+pille_pues resultado = nanai (2 ** 3 ** 2 > 500) y_tambien sizas o_que naranjas
+hable_pues(resultado)

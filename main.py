@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-main.py — Interfaz de consola del analizador lexico de Paisascript.
+main.py — Interfaz de consola del analizador lexico y sintactico de Paisascript.
 
-Toda la logica de analisis vive en `lexer.py`; este archivo solo presenta.
-Esa separacion es el requisito 15 del enunciado: el analizador sintactico
-reutilizara `lexer.py` sin tocar una linea de esta interfaz.
+Toda la logica de analisis vive en `lexer.py`, `parser.py`, `tabla_ll1.py` y
+`arbol_grafico.py`. Este archivo solo coordina y presenta los resultados.
+Esa separacion es el requisito 15 del enunciado.
 
 Ejecutar:  python main.py
 """
@@ -13,10 +13,14 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 from collections import Counter
 
 from ejemplos import EJEMPLOS
 from lexer import Lexer, TipoToken
+from parser import Parser, ErrorSintactico
+from tabla_ll1 import mostrar_tabla_ll1
+from arbol_grafico import mostrar_arbol_sintactico
 
 
 # =============================================================================
@@ -86,12 +90,6 @@ def subtitulo(texto: str) -> None:
 # =============================================================================
 
 def mostrar_codigo_resaltado(fuente: str, tokens, errores) -> None:
-    """Reimprime el fuente pintando cada lexema con el color de su categoria.
-
-    Las posiciones se reconstruyen a partir de (fila, columna) de cada token,
-    que es justamente lo que se quiere demostrar: el lexer sabe exactamente
-    donde empieza y termina cada pieza del texto.
-    """
     subtitulo("1. CODIGO FUENTE SEGMENTADO EN TOKENS")
 
     lineas = fuente.split("\n")
@@ -129,7 +127,6 @@ def mostrar_codigo_resaltado(fuente: str, tokens, errores) -> None:
 # =============================================================================
 
 def mostrar_flujo_tokens(tokens) -> None:
-    """Dibuja la secuencia de tokens como fichas etiquetadas."""
     subtitulo("2. FLUJO DE TOKENS  [ lexema | TIPO ]")
 
     utiles = [t for t in tokens if t.tipo is not TipoToken.FIN_ARCHIVO]
@@ -152,7 +149,6 @@ def mostrar_flujo_tokens(tokens) -> None:
 # =============================================================================
 
 def mostrar_tabla_simbolos(tokens) -> None:
-    """Lexema, categoria (TipoToken), fila y columna de cada token."""
     subtitulo("3. TABLA DE SIMBOLOS LEXICOS")
 
     utiles = [t for t in tokens if t.tipo is not TipoToken.FIN_ARCHIVO]
@@ -249,10 +245,11 @@ def mostrar_leyenda() -> None:
 
 
 # =============================================================================
-#  ORQUESTACION
+#  ORQUESTACION COMPLETA (LEXICO + SINTACTICO)
 # =============================================================================
 
 def analizar_y_reportar(fuente: str, encabezado: str = "") -> None:
+    # --- FASE 1: ANALISIS LEXICO ---
     titulo(f"ANALISIS LEXICO — {encabezado}" if encabezado else "ANALISIS LEXICO")
 
     lexer = Lexer(fuente)
@@ -267,6 +264,33 @@ def analizar_y_reportar(fuente: str, encabezado: str = "") -> None:
     mostrar_errores(fuente, errores)
     mostrar_resumen(tokens, errores)
 
+    # --- FASE 2: ANALISIS SINTACTICO ---
+    if errores:
+        print(f"\n{COLOR_ERROR} [!] Hay errores léxicos. El parser podría fallar o comportarse de forma inesperada. {R}")
+        
+    titulo("ANALISIS SINTACTICO Y PREDICCION LL(1)")
+    
+    # Imprimir Tabla LL(1)
+    mostrar_tabla_ll1()
+
+    try:
+        # Generar AST
+        parser = Parser(tokens)
+        ast = parser.parse()
+
+        print(f"\n{COLOR_TITULO}=============================================================================={R}")
+        print("                 7. ARBOL DE SINTAXIS ABSTRACTA (AST JSON)")
+        print(f"{COLOR_TITULO}=============================================================================={R}\n")
+        print(json.dumps(ast, indent=2, ensure_ascii=False))
+        
+        print(f"\n\033[1;92mAnálisis sintáctico completado con éxito. AST generado.{R}\n")
+
+        # Generar y mostrar Árbol Gráfico Visual
+        mostrar_arbol_sintactico(ast)
+
+    except ErrorSintactico as e:
+        print(f"\n{COLOR_ERROR} Error Sintáctico: {e} {R}\n")
+
 
 # =============================================================================
 #  MENU
@@ -279,7 +303,7 @@ BANNER = r"""
  |  __/ (_| | \__ \ (_| \__ \ (__ | || (__| | |_) \__ \
  |_|   \__,_|_|___/\__,_|___/\___| \__\___|_| .__/|___/
                                             |_|
-        Analizador lexico  ·  destino: Gleam
+        Compilador Frontend  ·  Paisascript a Gleam
 """
 
 
