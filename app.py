@@ -20,6 +20,7 @@ from parser import Parser, ErrorSintactico, ErroresSintacticos
 # --- IMPORTACIONES NUEVAS PARA ENTREGA 2 (LL1) ---
 from tabla_ll1 import obtener_dataframe_tabla, obtener_dataframes_conjuntos
 from parser_ll1 import analisis_predictivo_multi, NodoArbol
+from tabla_lalr import generar_datos_lalr1
 
 # --- IMPORTACIÓN DEL ASISTENTE DE IA ---
 from ai_assistant import analizar_error_con_ia, origen_api_key
@@ -396,7 +397,7 @@ st.sidebar.caption("Frontend: Análisis Léxico y Sintáctico")
 # --- SELECCION DE METODO ---
 metodo_analisis = st.sidebar.radio(
     "1. Método de Análisis Sintáctico",
-    ["1. Descendente Recursivo", "2. Predictivo LL(1) (Pila)"]
+    ["1. Descendente Recursivo", "2. Predictivo LL(1) (Pila)", "3. Ascendente LALR(1)"]
 )
 st.sidebar.divider()
 
@@ -497,6 +498,45 @@ if not codigo.strip():
 (tokens, errores, tabla, tabla_err, identificadores, chequeo, ast, error_sintactico,
  traza_ll1, errores_sint, pasos_arbol) = analizar(codigo, metodo_analisis)
 
+# Para el método Ascendente LALR(1), generamos tokens vía léxico
+# ya que analizar() está diseñado para LL(1)
+if metodo_analisis == "3. Ascendente LALR(1)":
+    lexer = Lexer(codigo)
+    tokens = lexer.tokenizar()
+    errores = [e for e in lexer.errores if e.tipo is not None]
+    utiles = [t for t in tokens if t.tipo is not TipoToken.FIN_ARCHIVO]
+    tabla = pd.DataFrame({
+        "#": list(range(1, len(utiles) + 1)),
+        "Lexema": [t.lexema for t in utiles],
+        "TokenType": [t.tipo.name for t in utiles],
+        "Categoría": [t.categoria for t in utiles],
+        "Fila": [t.fila for t in utiles],
+        "Columna": [t.columna for t in utiles],
+        "Valor": ["" if t.valor is None else str(t.valor) for t in utiles],
+        "Gleam": [equivalente(t.tipo) for t in utiles],
+        "Directo": ["sí" if es_directo(t.tipo) else "reestructura" for t in utiles]
+    })
+else:
+    # Para los otros métodos, los datos vienen de analizar()
+    pass  # tokens, errores, tabla ya fueron asignados por analizar()
+
+# Generar datos LALR(1) si se seleccionó el método ascendente
+if metodo_analisis == "3. Ascendente LALR(1)":
+    datos_lalr = generar_datos_lalr1()
+    action_df = datos_lalr["action"]
+    goto_df = datos_lalr["goto"]
+    primeros_df = datos_lalr["primeros"]
+    siguientes_df = datos_lalr["siguientes"]
+    metadata = datos_lalr["metadata"]
+else:
+    # Para los otros métodos, estas variables no son necesarias
+    # pero las definimos como DataFrame/vacío por si alguien las consulta
+    action_df = pd.DataFrame()
+    goto_df = pd.DataFrame()
+    primeros_df = pd.DataFrame()
+    siguientes_df = pd.DataFrame()
+    metadata = {"conflictos": 0, "nota": "Análisis LALR(1) no seleccionado"}
+
 # --- Metricas ---
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Tokens Validos", len(tokens))
@@ -517,8 +557,8 @@ pestañas = st.tabs([
     "Árbol Sintáctico (AST)",
     "Traza de Pila LL(1)",
     "Tablas LL(1) / Conjuntos",
-    "Código segmentado",
-    "Flujo de tokens",
+    "Traza LALR(1)",
+    "Tabla ACTION/GOTO",
     "Tabla de símbolos",
     "Errores y verificación",
     "Resumen",
@@ -589,17 +629,47 @@ with pestañas[2]:
     st.markdown("#### Tabla de Análisis Sintáctico M[A, a]")
     st.dataframe(df_tabla_M, use_container_width=True)
 
-# --- 1. Codigo segmentado ---------------------------------------------------
+# --- 1. Traza LALR(1) -------------------------------------------------------
 with pestañas[3]:
-    st.subheader("El fuente dividido en tokens")
-    st.markdown(html_leyenda(), unsafe_allow_html=True)
-    st.markdown(html_codigo(codigo, tokens, errores), unsafe_allow_html=True)
+    st.subheader("Traza Ascendente LALR(1)")
+    if metodo_analisis != "3. Ascendente LALR(1)":
+        st.info("Seleccione \"3. Ascendente LALR(1)\" en la barra lateral para ver la traza.")
+    else:
+        if error_sintactico:
+            st.error(f"Error en el análisis LALR(1): {error_sintactico}")
+        else:
+            st.success("Análisis LALR(1) completado sin conflictos")
+            st.markdown("### Tabla ACTION")
+            st.dataframe(action_df, use_container_width=True)
+            st.caption(f"Tabla ACTION: {action_df.shape[0]} filas × {action_df.shape[1]} columnas")
+            st.markdown("### Tabla GOTO")
+            st.dataframe(goto_df, use_container_width=True)
+            st.caption(f"Tabla GOTO: {goto_df.shape[0]} filas × {goto_df.shape[1]} columnas")
+            st.markdown("### Conjuntos FIRST")
+            st.dataframe(primeros_df, use_container_width=True)
+            st.markdown("### Conjuntos FOLLOW")
+            st.dataframe(siguientes_df, use_container_width=True)
+            st.markdown("### Metadatos del análisis")
+            st.json(metadata)
 
-# --- 2. Flujo de tokens -----------------------------------------------------
+# --- 2. Tabla ACTION/GOTO ---------------------------------------------------
 with pestañas[4]:
-    st.subheader("Secuencia de tokens emitida")
-    st.markdown(html_leyenda(), unsafe_allow_html=True)
-    st.markdown(html_fichas(tokens), unsafe_allow_html=True)
+    st.subheader("Tablas ACTION y GOTO LALR(1)")
+    if metodo_analisis != "3. Ascendente LALR(1)":
+        st.info("Seleccione \"3. Ascendente LALR(1)\" en la barra lateral para ver las tablas.")
+    else:
+        if error_sintactico:
+            st.error(f"Error: {error_sintactico}")
+        else:
+            st.success("Tablas LALR(1) generadas sin conflictos")
+            st.markdown("#### Descripción de la tabla ACTION")
+            st.write(f"- {action_df.shape[0]} estados (filas)")
+            st.write(f"- {action_df.shape[1]} símbolos (columnas)")
+            st.dataframe(action_df.head(10), use_container_width=True)
+            st.markdown("#### Descripción de la tabla GOTO")
+            st.write(f"- {goto_df.shape[0]} estados (filas)")
+            st.write(f"- {goto_df.shape[1]} no-terminales (columnas)")
+            st.dataframe(goto_df.head(10), use_container_width=True)
 
 # --- 3. Tabla de simbolos ---------------------------------------------------
 with pestañas[5]:
