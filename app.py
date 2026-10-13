@@ -6,6 +6,7 @@ app.py — Interfaz web (Streamlit) del analizador léxico y sintáctico de Pais
 from __future__ import annotations
 
 import html
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -18,8 +19,29 @@ from mapeo_gleam import equivalente, es_directo
 from parser import Parser, ErrorSintactico, ErroresSintacticos
 
 # --- IMPORTACIONES NUEVAS PARA ENTREGA 2 (LL1) ---
-from tabla_ll1 import obtener_dataframe_tabla, obtener_dataframes_conjuntos
+from tabla_ll1 import obtener_dataframe_tabla, obtener_dataframes_conjuntos, GRAMATICA_BNF
 from parser_ll1 import analisis_predictivo_multi, NodoArbol
+from tabla_lalr import generar_datos_lalr1
+from parser_lalr import generar_parser_lalr1
+
+# Importador condicional para el generador LALR(1) completo
+try:
+    from generador_lalr1_completo import generar_tabla_lalr1_completa
+    USO_COMPLETO = True
+except ImportError:
+    USO_COMPLETO = False
+
+# `post_procesar_lalr1` es opcional: si el módulo no lo expone seguimos sin él.
+try:
+    from generador_lalr1_completo import post_procesar_lalr1
+except ImportError:
+    post_procesar_lalr1 = None
+
+# Pasos que se despliegan por defecto en el "Detalle por paso" de la traza
+# LALR(1). La traza completa puede tener miles de pasos (el driver ya no tiene
+# tope fijo) y un expander por paso saturaría Streamlit, así que se muestra una
+# ventana navegable; la tabla y el CSV de arriba siempre llevan la traza entera.
+N_PASOS_DETALLE = 30
 
 # --- IMPORTACIÓN DEL ASISTENTE DE IA ---
 from ai_assistant import analizar_error_con_ia, origen_api_key
@@ -186,8 +208,13 @@ def renderizar_stepper_arbol(pasos: list[dict], key_prefix: str) -> None:
             idx = min(total - 1, idx + 1)
             st.session_state[clave_idx] = idx
             st.session_state[clave_slider] = idx + 1
-    with c_slider:
-        idx = st.slider("Ir al paso", 1, total, key=clave_slider) - 1
+    # Slider para navegar por pasos - solo si hay más de un paso
+    if total > 1:
+        with c_slider:
+            idx = st.slider("Ir al paso", 1, total, key=clave_slider) - 1
+    else:
+        # Cuando solo hay un paso, idx se fija en 0 directamente
+        idx = 0
 
     st.session_state[clave_idx] = idx
     paso = pasos[idx]
@@ -298,6 +325,47 @@ def analizar(codigo: str, metodo: str):
             ast = None
             pasos_arbol = []
             errores_sint = [f"Error interno en el Parser Recursivo: {str(e)}"]
+    elif "LALR(1)" in metodo:
+        try:
+            from generador_lalr1_completo import generar_tabla_lalr1_completa as gen_lalr
+            from parser_lalr import generar_parser_lalr1
+            from tabla_ll1 import GRAMATICA_BNF
+            
+            resultado_lalr = gen_lalr()
+            
+            # POST-PROCESAMIENTO: Corregir acciones de shift en el estado 0
+            # para tokens críticos (KW_LECTURA, KW_IMPRESION, etc.) que pueden
+            # perderse durante la fusión LALR(1)
+            if post_procesar_lalr1 is not None:
+                resultado_lalr = post_procesar_lalr1(resultado_lalr)
+            
+            parser = generar_parser_lalr1(resultado_lalr)
+            
+            if parser is None:
+                raise ValueError("No se pudo generar el parser LALR(1)")
+            
+            # Ejecutar análisis
+            ast, traza_lalr, es_valido, errores_lalr = parser.parse_con_pasos(tokens)
+            
+            # Formatear traza para el streamlit
+            traza_ll1 = []
+            for paso in traza_lalr:
+                traza_ll1.append({
+                    'Paso': paso['Paso'],
+                    'Acción': paso['Acción'],
+                    'Pila': paso['Pila'],
+                    'Estados': paso.get('Estados'),
+                    'Entrada': paso['Entrada'],
+                    'Arbol': paso.get('Arbol')
+                })
+            
+            errores_sint = errores_lalr
+            pasos_arbol = traza_lalr  # Ya traen la estructura correcta
+        except Exception as e:
+            ast = None
+            traza_ll1 = []
+            pasos_arbol = []
+            errores_sint = [f"Error en el análisis LALR(1): {str(e)}"]
     else:
         try:
             traza, raiz_nodo, es_valido, lista_err = analisis_predictivo_multi(tokens)
@@ -396,7 +464,7 @@ st.sidebar.caption("Frontend: Análisis Léxico y Sintáctico")
 # --- SELECCION DE METODO ---
 metodo_analisis = st.sidebar.radio(
     "1. Método de Análisis Sintáctico",
-    ["1. Descendente Recursivo", "2. Predictivo LL(1) (Pila)"]
+    ["1. Descendente Recursivo", "2. Predictivo LL(1) (Pila)", "3. Ascendente LALR(1)"]
 )
 st.sidebar.divider()
 
@@ -497,6 +565,94 @@ if not codigo.strip():
 (tokens, errores, tabla, tabla_err, identificadores, chequeo, ast, error_sintactico,
  traza_ll1, errores_sint, pasos_arbol) = analizar(codigo, metodo_analisis)
 
+# Para el método Ascendente LALR(1), generamos tokens vía léxico
+# ya que analizar() está diseñado para LL(1)
+if metodo_analisis == "3. Ascendente LALR(1)":
+    lexer = Lexer(codigo)
+    tokens = lexer.tokenizar()
+    errores = lexer.errores
+    utiles = [t for t in tokens if t.tipo is not TipoToken.FIN_ARCHIVO]
+    tabla = pd.DataFrame({
+        "#": list(range(1, len(utiles) + 1)),
+        "Lexema": [t.lexema for t in utiles],
+        "TokenType": [t.tipo.name for t in utiles],
+        "Categoría": [t.categoria for t in utiles],
+        "Fila": [t.fila for t in utiles],
+        "Columna": [t.columna for t in utiles],
+        "Valor": ["" if t.valor is None else str(t.valor) for t in utiles],
+        "Gleam": [equivalente(t.tipo) for t in utiles],
+        "Directo": ["sí" if es_directo(t.tipo) else "reestructura" for t in utiles]
+    })
+else:
+    # Para los otros métodos, los datos vienen de analizar()
+    pass  # tokens, errores, tabla ya fueron asignados por analizar()
+
+# Generar datos LALR(1) si se seleccionó el método ascendente
+if metodo_analisis == "3. Ascendente LALR(1)":
+    if USO_COMPLETO:
+        # Usar el generador LALR(1) completo
+        result = generar_tabla_lalr1_completa()
+        import pandas as pd
+        
+        EPS = "ε" # (cadena vacía para el análisis sintáctico)
+        # Crear DataFrames desde el resultado completo
+        primeros_data = result["primeros"]
+        siguientes_data = result["siguientes"]
+        
+        # DataFrame de FIRSTs
+        primeros_list = [
+            {"No Terminal": nt, "PRIMERO": "{ " + ", ".join(sorted(list(primeros_data[nt] - {EPS}))) + " }"}
+            for nt in result["primeros"].keys()
+        ]
+        primeros_df = pd.DataFrame(primeros_list).set_index("No Terminal")
+        
+        # DataFrame de SIGUIENTEs
+        siguientes_list = [
+            {"No Terminal": nt, "SIGUIENTE": "{ " + ", ".join(s for s in siguientes_data[nt]) + " }"}
+            for nt in result["siguientes"].keys()
+        ]
+        siguientes_df = pd.DataFrame(siguientes_list).set_index("No Terminal")
+        
+        # Tablas ACTION / GOTO REALES de LALR(1): filas = ESTADOS (0..n-1),
+        # columnas = terminales (ACTION) y no-terminales (GOTO).
+        # Es la tabla que realmente usa el parser ascendente y la que exige
+        # el Quiz 3 (ACTION[state][token] = s_i / r_j / acc).
+        from parser_lalr import construir_dataframes_lalr1
+        lalr_tablas = construir_dataframes_lalr1(result)
+        action_df = lalr_tablas["action_df"]
+        goto_df = lalr_tablas["goto_df"]
+        producciones_lalr = lalr_tablas["producciones"]
+        parser_lalr_instance = lalr_tablas["parser"]
+        
+        metadata = {
+            "estados_lr1": result["metadata"]["estados_lr1"],
+            "estados_lalr": result["metadata"]["estados_lalr"],
+            "estados_reduzidos": result["metadata"]["estados_reduzidos"],
+            "conflictos": 0,
+            "nota": f"Tabla LALR(1) generada con {result['metadata']['reduction_percentage']}% de reducción de estados",
+            "goto_total_entries": result["metadata"]["goto_total_entries"],
+        }
+    else:
+        # Versión simplificada (original)
+        datos_lalr = generar_datos_lalr1()
+        action_df = datos_lalr["action"]
+        goto_df = datos_lalr["goto"]
+        primeros_df = datos_lalr["primeros"]
+        siguientes_df = datos_lalr["siguientes"]
+        metadata = datos_lalr["metadata"]
+        producciones_lalr = []
+        parser_lalr_instance = None
+else:
+    # Para los otros métodos, estas variables no son necesarias
+    # pero las definimos como DataFrame/vacío por si alguien las consulta
+    action_df = pd.DataFrame()
+    goto_df = pd.DataFrame()
+    df_primeros = pd.DataFrame()
+    df_siguientes = pd.DataFrame()
+    metadata = {"conflictos": 0, "nota": "Análisis LALR(1) no seleccionado"}
+    producciones_lalr = []
+    parser_lalr_instance = None
+
 # --- Metricas ---
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Tokens Validos", len(tokens))
@@ -517,8 +673,8 @@ pestañas = st.tabs([
     "Árbol Sintáctico (AST)",
     "Traza de Pila LL(1)",
     "Tablas LL(1) / Conjuntos",
-    "Código segmentado",
-    "Flujo de tokens",
+    "Traza LALR(1)",
+    "Tabla ACTION/GOTO",
     "Tabla de símbolos",
     "Errores y verificación",
     "Resumen",
@@ -589,17 +745,282 @@ with pestañas[2]:
     st.markdown("#### Tabla de Análisis Sintáctico M[A, a]")
     st.dataframe(df_tabla_M, use_container_width=True)
 
-# --- 1. Codigo segmentado ---------------------------------------------------
+# --- 1. Traza LALR(1) -------------------------------------------------------
 with pestañas[3]:
-    st.subheader("El fuente dividido en tokens")
-    st.markdown(html_leyenda(), unsafe_allow_html=True)
-    st.markdown(html_codigo(codigo, tokens, errores), unsafe_allow_html=True)
+    st.subheader("Traza Ascendente LALR(1)")
+    if metodo_analisis != "3. Ascendente LALR(1)":
+        st.info("Seleccione \"3. Ascendente LALR(1)\" en la barra lateral para ver la traza.")
+    else:
+        # Mostrar traza si está disponible
+        if traza_ll1 and len(traza_ll1) > 0:
+            if error_sintactico:
+                st.warning(
+                    "Análisis LALR(1) **finalizado con errores** — se muestra la traza "
+                    "hasta el paso en que se produjo el fallo."
+                )
+            else:
+                st.success("Análisis LALR(1) completado con éxito")
 
-# --- 2. Flujo de tokens -----------------------------------------------------
+            # --- Formato legible para la traza paso a paso ------------------
+            # Tokens cuyo lexema aporta información (identificadores, números y
+            # cadenas); para el resto el nombre del tipo ya dice todo.
+            _LEXEMAS_INFORMATIVOS = {"IDENTIFICADOR", "NUM_ENTERO",
+                                     "NUM_REAL", "CADENA_LITERAL"}
+
+            def _fmt_simbolo(s):
+                """Símbolo de la pila: 'IDENTIFICADOR(x)', 'NUM_ENTERO(42)' o '<tipo>'."""
+                if hasattr(s, 'tipo') and hasattr(s.tipo, 'name'):
+                    lex = getattr(s, 'lexema', '') or ''
+                    if s.tipo.name in _LEXEMAS_INFORMATIVOS and lex:
+                        return f"{s.tipo.name}({lex})"
+                    return s.tipo.name
+                return str(s)
+
+            def _fmt_token(e):
+                """Token de la entrada restante: 'NUM_ENTERO(42)' o '$'."""
+                if isinstance(e, str):
+                    return e
+                if hasattr(e, 'tipo') and hasattr(e.tipo, 'name'):
+                    lex = getattr(e, 'lexema', '') or ''
+                    if e.tipo.name in _LEXEMAS_INFORMATIVOS and lex:
+                        return f"{e.tipo.name}({lex})"
+                    return e.tipo.name
+                if hasattr(e, 'name'):
+                    return e.name
+                return str(e)
+
+            filas_traza = []
+            for paso_tr in traza_ll1:
+                pila_tr = paso_tr.get('Pila', []) or []
+                estados_tr = paso_tr.get('Estados')
+                if estados_tr and len(estados_tr) == len(pila_tr):
+                    pila_txt = " ".join(
+                        f"{_fmt_simbolo(s)}·{est}"
+                        for s, est in zip(pila_tr, estados_tr))
+                else:
+                    pila_txt = " ".join(_fmt_simbolo(s) for s in pila_tr)
+                filas_traza.append({
+                    'Paso': paso_tr['Paso'],
+                    'Pila (símbolo·estado)': pila_txt,
+                    'Entrada restante': " ".join(
+                        _fmt_token(e) for e in (paso_tr.get('Entrada') or [])),
+                    'Acción': paso_tr['Acción'],
+                })
+            df_traza = pd.DataFrame(filas_traza)
+            st.dataframe(df_traza, use_container_width=True, hide_index=True)
+            st.caption(
+                r"La pila se lee de abajo hacia arriba como `símbolo·estado`; el estado junto a un "
+                r"símbolo es el alcanzado al consumirlo. **El último estado de un paso es el tope "
+                r"con el que se consulta ACTION\[estado\]\[token\] en el paso siguiente.**"
+            )
+            st.download_button(
+                "⬇️ Descargar traza completa (CSV)",
+                data=df_traza.to_csv().encode("utf-8"),
+                file_name="traza_LALR1.csv",
+                mime="text/csv",
+                key="dl_traza",
+            )
+            
+            # --- Detalle por paso: ventana navegable sobre la traza --------
+            # Las trazas largas pueden tener miles de pasos (el driver ya no
+            # tiene tope fijo) y un expander por paso saturaría Streamlit, así
+            # que se despliega una ventana seleccionable. La tabla y el CSV de
+            # arriba siempre tienen la traza completa.
+            st.markdown("### Detalle por paso")
+            total_pasos = len(traza_ll1)
+            clave_ventana = "traza_lalr_ventana"
+            clave_firma_traza = "traza_lalr_firma"
+
+            # Si cambió el código (y por lo tanto la cantidad de pasos), se
+            # descarta la ventana guardada para no quedar apuntando fuera de
+            # rango. Es el mismo criterio que usa renderizar_stepper_arbol.
+            firma_traza = f"lalr:{total_pasos}"
+            if st.session_state.get(clave_firma_traza) != firma_traza:
+                st.session_state[clave_firma_traza] = firma_traza
+                st.session_state.pop(clave_ventana, None)
+
+            if total_pasos > N_PASOS_DETALLE:
+                tope = min(N_PASOS_DETALLE, total_pasos)
+                rango = st.slider(
+                    "Rango de pasos a detallar", 1, total_pasos,
+                    (1, tope), key=clave_ventana)
+                ventana = traza_ll1[rango[0] - 1:rango[1]]
+                st.caption(
+                    f"Mostrando {len(ventana)} de {total_pasos} pasos "
+                    f"(pasos {rango[0]}–{rango[1]}). La tabla y el CSV de "
+                    f"arriba tienen la traza completa."
+                )
+            else:
+                ventana = traza_ll1
+
+            for paso in ventana:
+                with st.expander(f"Paso {paso['Paso']}: {paso['Acción']}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        # Convert Token objects to strings for display
+                        pila_display = []
+                        estados_paso = paso.get('Estados') or []
+                        for idx_item, item in enumerate(paso['Pila']):
+                            txt = _fmt_simbolo(item)
+                            if idx_item < len(estados_paso):
+                                txt = f"{txt} · {estados_paso[idx_item]}"
+                            pila_display.append(txt)
+                        st.write("**Pila (símbolo·estado):**", ', '.join(pila_display) if pila_display else '---')
+                        if estados_paso:
+                            st.write("**Estado tope (se usa en ACTION):**", estados_paso[-1])
+                        if paso.get('Arbol'):
+                            st.write("**Árbol:**", paso['Arbol']['tipo'])
+                    with col2:
+                        st.write("**Entrada:**",
+                                 ' '.join(_fmt_token(t) for t in paso['Entrada']) if paso['Entrada'] else '---')
+                        # Mostrar información de la acción
+                        accion = paso['Acción']
+                        if 'reduce' in accion.lower():
+                            # Extraer número de producción
+                            match = re.search(r'reduce (\d+)', accion)
+                            if match:
+                                prod_num = match.group(1)
+                                st.write(f"**Producción:** {prod_num}")
+                        elif 'shift' in accion.lower():
+                            match = re.search(r'shift a estado (\d+)', accion)
+                            if match:
+                                st.write(f"**Estado destino:** {match.group(1)}")
+                        elif 'accept' in accion.lower():
+                            st.write(f"**Resultado:** Cadena válida aceptada")
+            
+            # Ya no mostramos tablas ACTION/GOTO aquí (están en la pestaña 4)
+            st.markdown("### ℹ️ Nota: Las tablas ACTION y GOTO completas se muestran en la pestaña \"Tablas ACTION y GOTO LALR(1)\" (Tab 4)")
+            
+            # Mostrar metadatos
+            st.markdown("### Metadatos del análisis")
+            st.json(metadata)
+            
+            if error_sintactico:
+                st.error(f"Errores: {error_sintactico}")
+        else:
+            st.info("Ejecute un análisis LALR(1) para ver la traza paso a paso")
+        
+        st.markdown("### Conjuntos FIRST")
+        st.dataframe(primeros_df, use_container_width=True)
+        st.markdown("### Conjuntos FOLLOW")
+        st.dataframe(siguientes_df, use_container_width=True)
+
+# --- 2. Tabla ACTION/GOTO ---------------------------------------------------
 with pestañas[4]:
-    st.subheader("Secuencia de tokens emitida")
-    st.markdown(html_leyenda(), unsafe_allow_html=True)
-    st.markdown(html_fichas(tokens), unsafe_allow_html=True)
+    st.subheader("Tablas ACTION y GOTO LALR(1)")
+    if metodo_analisis != "3. Ascendente LALR(1)":
+        st.info("Seleccione \"3. Ascendente LALR(1)\" en la barra lateral para ver las tablas.")
+    else:
+        if action_df.empty or goto_df.empty:
+            st.warning("No se pudieron construir las tablas LALR(1).")
+        else:
+            def _contar(pref):
+                return sum(1 for v in action_df.to_numpy().ravel()
+                           if isinstance(v, str) and v.startswith(pref))
+
+            n_est = action_df.shape[0]
+            n_term = action_df.shape[1]
+            n_nt = goto_df.shape[1]
+            n_shift, n_reduce, n_acc = _contar("s"), _contar("r"), _contar("acc")
+
+            st.success(
+                f"**Tabla LALR(1) generada sin conflictos** — "
+                f"{n_est} estados · ACTION: {n_est}×{n_term} · GOTO: {n_est}×{n_nt} · "
+                f"{n_shift} shift, {n_reduce} reduce, {n_acc} accept"
+            )
+
+            if error_sintactico:
+                st.info(
+                    "La tabla ACTION/GOTO es válida y completa; el mensaje siguiente "
+                    f"corresponde al programa de entrada, no a la tabla: {error_sintactico}"
+                )
+
+            with st.expander("📖 Cómo leer la tabla (notación LR)"):
+                st.markdown(
+                    "- **`s{n}`** → *shift*: empuja el token y pasa al estado `n`.\n"
+                    "- **`r{k}`** → *reduce*: reduce con la producción `k` "
+                    "(ver leyenda de producciones más abajo).\n"
+                    "- **`acc`** → *accept*: la cadena fue reconocida completa.\n"
+                    "- **celda vacía** → *error*: acción no definida para ese par "
+                    "(estado, token); el análisis se rechaza.\n"
+                    "- **GOTO**: fila = estado, columna = no-terminal, celda = estado destino "
+                    "tras realizar la reducción."
+                )
+
+            # --- Tabla ACTION completa -------------------------------------
+            st.markdown(f"### Tabla ACTION completa ({n_est} estados × {n_term} terminales)")
+            st.dataframe(action_df, use_container_width=True, height=460)
+            st.download_button(
+                "⬇️ Descargar tabla ACTION (CSV)",
+                data=action_df.to_csv().encode("utf-8"),
+                file_name="tabla_ACTION_LALR1.csv",
+                mime="text/csv",
+                key="dl_action",
+            )
+
+            # --- Leyenda de producciones -----------------------------------
+            if producciones_lalr:
+                st.markdown("### Leyenda de producciones (número `k` de `r{k}`)")
+                df_prods = pd.DataFrame(
+                    [{"k": i + 1,
+                      "No-terminal": nt,
+                      "Producción": " ".join(sym for sym in prod) if prod else "ε"}
+                     for i, (nt, prod) in enumerate(producciones_lalr)]
+                ).set_index("k")
+                st.dataframe(df_prods, use_container_width=True, height=320)
+
+            # --- Tabla GOTO completa ---------------------------------------
+            st.markdown(f"### Tabla GOTO completa ({n_est} estados × {n_nt} no-terminales)")
+            st.dataframe(goto_df, use_container_width=True, height=460)
+            st.download_button(
+                "⬇️ Descargar tabla GOTO (CSV)",
+                data=goto_df.to_csv().encode("utf-8"),
+                file_name="tabla_GOTO_LALR1.csv",
+                mime="text/csv",
+                key="dl_goto",
+            )
+
+            # --- Inspector de un estado (para la sustentación) --------------
+            if parser_lalr_instance is not None:
+                st.markdown("### 🔎 Inspector de estado (ayuda para la sustentación)")
+                estado_sel = st.selectbox(
+                    "Estado", list(action_df.index), index=0, key="insp_estado"
+                )
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.markdown("**ACTION**")
+                    acciones = {t: a for t, a in parser_lalr_instance
+                                .action_table.get(estado_sel, {}).items()}
+                    if acciones:
+                        st.dataframe(
+                            pd.DataFrame({"Terminal": acciones.keys(),
+                                          "Acción": acciones.values()}).set_index("Terminal"),
+                            use_container_width=True, height=300)
+                    else:
+                        st.caption("Sin acciones definidas (estado de error).")
+                with col_b:
+                    st.markdown("**GOTO**")
+                    gotos = {nt: s for nt, mapa in parser_lalr_instance.goto_table.items()
+                             if (s := mapa.get(estado_sel)) is not None}
+                    if gotos:
+                        st.dataframe(
+                            pd.DataFrame({"No-terminal": gotos.keys(),
+                                          "Estado destino": gotos.values()}).set_index("No-terminal"),
+                            use_container_width=True, height=300)
+                    else:
+                        st.caption("Sin transiciones GOTO desde este estado.")
+
+                items = parser_lalr_instance.lalr_states_items[estado_sel]
+                with st.expander(f"Items LALR(1) del estado {estado_sel} ({len(items)} items)"):
+                    filas = []
+                    for nt, rhs, dot, la in sorted(items):
+                        antes = " ".join(rhs[:dot])
+                        despues = " ".join(rhs[dot:])
+                        punto = f"{antes} • {despues}".strip()
+                        filas.append({"Producción": f"{nt} → {' '.join(rhs) if rhs else 'ε'}",
+                                      "Con punto": punto,
+                                      "Lookahead": la})
+                    st.dataframe(pd.DataFrame(filas), use_container_width=True, height=360)
 
 # --- 3. Tabla de simbolos ---------------------------------------------------
 with pestañas[5]:

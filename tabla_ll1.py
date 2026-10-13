@@ -1,55 +1,71 @@
 """
 Módulo: tabla_ll1.py
 Descripción: Generador dinámico de Conjuntos PRIMERO, SIGUIENTE y 
-Tabla de Análisis Sintáctico LL(1) M[A, a] según la gramática BNF.
+Tabla de Análisis Sintáctico LL(1) M[A, a] según la gramática BNF completa de PaisaScript.
 """
 import pandas as pd
 
 # ==========================================
-# 1. GRAMÁTICA BNF (FACTORIZADA PARA LL1)
+# 1. GRAMÁTICA BNF COMPLETA DE PAISCRIPT
 # ==========================================
-# Las claves son los No-Terminales. 
-# Los valores son listas de producciones (cada producción es una lista de símbolos).
+# Terminales usan los nombres exactos del lexer (como KW_DECLARACION, etc.)
+# La gramática está factorizada por la izquierda y sin recursividad izquierda para LL(1)
+# Las producciones ε se representan como listas vacías []
 GRAMATICA_BNF = {
+    # Programa y declaraciones
     "<programa>": [["<lista_declaraciones>"]],
-    "<lista_declaraciones>": [["<declaracion>", "<lista_declaraciones>"], ["ε"]],
+    "<lista_declaraciones>": [["<declaracion>", "<lista_declaraciones>"], []],
     "<declaracion>": [["<def_funcion>"], ["<sentencia>"]],
     
+    # Definición de funciones
     "<def_funcion>": [["KW_FUNCION", "IDENTIFICADOR", "PAR_ABRE", "<parametros>", "PAR_CIERRA", "<tipo_retorno>", "KW_HACER", "<bloque>", "KW_FIN_FUNCION"]],
-    "<tipo_retorno>": [["KW_FLECHA", "<tipo>"], ["ε"]],
-    "<parametros>": [["<param_lista>"], ["ε"]],
+    "<tipo_retorno>": [["KW_FLECHA", "<tipo>"], []],
+    "<parametros>": [["<param_lista>"], []],
     "<param_lista>": [["<tipo>", "IDENTIFICADOR", "<param_resto>"]],
-    "<param_resto>": [["COMA", "<tipo>", "IDENTIFICADOR", "<param_resto>"], ["ε"]],
+    "<param_resto>": [["COMA", "<tipo>", "IDENTIFICADOR", "<param_resto>"], []],
     "<tipo>": [["KW_TIPO_ENTERO"], ["KW_TIPO_REAL"], ["KW_TIPO_CADENA"], ["KW_TIPO_BOOLEANO"]],
     
+    # Bloques y sentencias
     "<bloque>": [["<sentencia>", "<lista_sentencias>"]],
-    "<lista_sentencias>": [["<sentencia>", "<lista_sentencias>"], ["ε"]],
+    "<lista_sentencias>": [["<sentencia>", "<lista_sentencias>"], []],
     
     "<sentencia>": [
-        ["<sent_declaracion>"], ["<sent_lectura>"], ["<sent_impresion>"],
-        ["<sent_si>"], ["<sent_mientras>"], ["<sent_para>"],
-        ["<sent_pillemos>"], ["<sent_retornar>"], ["<sent_asignacion_o_llamada>"]
+        ["<sent_declaracion>"],
+        ["<sent_lectura>"],
+        ["<sent_impresion>"],
+        ["<sent_si>"],
+        ["<sent_mientras>"],
+        ["<sent_para>"],
+        ["<sent_pillemos>"],
+        ["<sent_retornar>"],
+        ["<sent_llamada>"]
     ],
     
+    # Declaración / asignación
     "<sent_declaracion>": [["KW_DECLARACION", "<tipo_opcional>", "IDENTIFICADOR", "OP_ASIGNACION", "<expresion>"]],
-    "<tipo_opcional>": [["<tipo>"], ["ε"]],
+    "<tipo_opcional>": [["<tipo>"], []],
     "<sent_lectura>": [["KW_LECTURA", "PAR_ABRE", "IDENTIFICADOR", "PAR_CIERRA"]],
     "<sent_impresion>": [["KW_IMPRESION", "PAR_ABRE", "<expresion>", "PAR_CIERRA"]],
     "<sent_retornar>": [["KW_RETORNAR", "<expresion>"]],
     
-    # Factorización izquierda para asignación vs llamada
-    "<sent_asignacion_o_llamada>": [["IDENTIFICADOR", "<resto_asignacion_llamada>"]],
-    "<resto_asignacion_llamada>": [["PAR_ABRE", "<argumentos>", "PAR_CIERRA"], ["OP_ASIGNACION", "<expresion>"]],
+    # Llamada a función usada como sentencia
+    "<sent_llamada>": [["IDENTIFICADOR", "PAR_ABRE", "<argumentos>", "PAR_CIERRA"]],
     
+    # Condicional
     "<sent_si>": [["KW_SI", "<expresion>", "KW_ENTONCES", "<bloque>", "<rama_sino>", "KW_FIN_SI"]],
-    "<rama_sino>": [["KW_SINO", "<bloque>"], ["ε"]],
-    "<sent_mientras>": [["KW_MIENTRAS", "<expresion>", "KW_HACER", "<bloque>", "KW_FIN_MIENTRAS"]],
-    "<sent_para>": [["KW_PARA", "IDENTIFICADOR", "KW_DESDE", "<expresion>", "KW_HASTA", "<expresion>", "<paso_opcional>", "KW_HACER", "<bloque>", "KW_FIN_PARA"]],
-    "<paso_opcional>": [["KW_PASO", "<expresion>"], ["ε"]],
+    "<rama_sino>": [["KW_SINO", "<bloque>"], []],
     
+    # Repetición por condición (while)
+    "<sent_mientras>": [["KW_MIENTRAS", "<expresion>", "KW_HACER", "<bloque>", "KW_FIN_MIENTRAS"]],
+    
+    # Repetición con variable de control (for)
+    "<sent_para>": [["KW_PARA", "IDENTIFICADOR", "KW_DESDE", "<expresion>", "KW_HASTA", "<expresion>", "<paso_opcional>", "KW_HACER", "<bloque>", "KW_FIN_PARA"]],
+    "<paso_opcional>": [["KW_PASO", "<expresion>"], []],
+    
+    # Calce de patrones (case)
     "<sent_pillemos>": [["KW_PILLEMOS", "<expresion>", "LLAVE_ABRE", "<lista_casos>", "LLAVE_CIERRA"]],
     "<lista_casos>": [["<caso>", "<lista_casos_resto>"]],
-    "<lista_casos_resto>": [["<caso>", "<lista_casos_resto>"], ["ε"]],
+    "<lista_casos_resto>": [["<caso>", "<lista_casos_resto>"], []],
     "<caso>": [["<patron>", "KW_FLECHA", "<cuerpo_caso>"]],
     "<cuerpo_caso>": [["LLAVE_ABRE", "<bloque>", "LLAVE_CIERRA"], ["<sentencia>"]],
     "<patron>": [["NUM_ENTERO"], ["NUM_REAL"], ["CADENA_LITERAL"], ["LIT_VERDADERO"], ["LIT_FALSO"], ["IDENTIFICADOR"], ["COMODIN"]],
@@ -57,29 +73,29 @@ GRAMATICA_BNF = {
     # Expresiones LL1 (Niveles de precedencia)
     "<expresion>": [["<expr_o>"]],
     "<expr_o>": [["<expr_y>", "<expr_o_p>"]],
-    "<expr_o_p>": [["OP_O", "<expr_y>", "<expr_o_p>"], ["ε"]],
+    "<expr_o_p>": [["OP_O", "<expr_y>", "<expr_o_p>"], []],
     "<expr_y>": [["<expr_igualdad>", "<expr_y_p>"]],
-    "<expr_y_p>": [["OP_Y", "<expr_igualdad>", "<expr_y_p>"], ["ε"]],
+    "<expr_y_p>": [["OP_Y", "<expr_igualdad>", "<expr_y_p>"], []],
     "<expr_igualdad>": [["<expr_relacional>", "<expr_igualdad_p>"]],
-    "<expr_igualdad_p>": [["OP_IGUAL", "<expr_relacional>", "<expr_igualdad_p>"], ["OP_DISTINTO", "<expr_relacional>", "<expr_igualdad_p>"], ["ε"]],
+    "<expr_igualdad_p>": [["OP_IGUAL", "<expr_relacional>", "<expr_igualdad_p>"], ["OP_DISTINTO", "<expr_relacional>", "<expr_igualdad_p>"], []],
     "<expr_relacional>": [["<expr_concat>", "<expr_relacional_p>"]],
-    "<expr_relacional_p>": [["OP_MAYOR", "<expr_concat>", "<expr_relacional_p>"], ["OP_MENOR", "<expr_concat>", "<expr_relacional_p>"], ["OP_MAYOR_IGUAL", "<expr_concat>", "<expr_relacional_p>"], ["OP_MENOR_IGUAL", "<expr_concat>", "<expr_relacional_p>"], ["ε"]],
+    "<expr_relacional_p>": [["OP_MAYOR", "<expr_concat>", "<expr_relacional_p>"], ["OP_MENOR", "<expr_concat>", "<expr_relacional_p>"], ["OP_MAYOR_IGUAL", "<expr_concat>", "<expr_relacional_p>"], ["OP_MENOR_IGUAL", "<expr_concat>", "<expr_relacional_p>"], []],
     "<expr_concat>": [["<expr_aditiva>", "<expr_concat_p>"]],
-    "<expr_concat_p>": [["OP_CONCAT", "<expr_aditiva>", "<expr_concat_p>"], ["ε"]],
+    "<expr_concat_p>": [["OP_CONCAT", "<expr_aditiva>", "<expr_concat_p>"], []],
     "<expr_aditiva>": [["<expr_multiplicativa>", "<expr_aditiva_p>"]],
-    "<expr_aditiva_p>": [["OP_SUMA", "<expr_multiplicativa>", "<expr_aditiva_p>"], ["OP_RESTA", "<expr_multiplicativa>", "<expr_aditiva_p>"], ["ε"]],
+    "<expr_aditiva_p>": [["OP_SUMA", "<expr_multiplicativa>", "<expr_aditiva_p>"], ["OP_RESTA", "<expr_multiplicativa>", "<expr_aditiva_p>"], []],
     "<expr_multiplicativa>": [["<expr_potencia>", "<expr_multiplicativa_p>"]],
-    "<expr_multiplicativa_p>": [["OP_MULT", "<expr_potencia>", "<expr_multiplicativa_p>"], ["OP_DIV", "<expr_potencia>", "<expr_multiplicativa_p>"], ["OP_MODULO", "<expr_potencia>", "<expr_multiplicativa_p>"], ["ε"]],
+    "<expr_multiplicativa_p>": [["OP_MULT", "<expr_potencia>", "<expr_multiplicativa_p>"], ["OP_DIV", "<expr_potencia>", "<expr_multiplicativa_p>"], ["OP_MODULO", "<expr_potencia>", "<expr_multiplicativa_p>"], []],
     "<expr_potencia>": [["<expr_unaria>", "<expr_potencia_p>"]],
-    "<expr_potencia_p>": [["OP_POTENCIA", "<expr_potencia>"], ["ε"]],
+    "<expr_potencia_p>": [["OP_POTENCIA", "<expr_potencia>"], []],
     "<expr_unaria>": [["OP_NO", "<expr_unaria>"], ["OP_RESTA", "<expr_unaria>"], ["<expr_primaria>"]],
     
     "<expr_primaria>": [["PAR_ABRE", "<expresion>", "PAR_CIERRA"], ["NUM_ENTERO"], ["NUM_REAL"], ["CADENA_LITERAL"], ["LIT_VERDADERO"], ["LIT_FALSO"], ["IDENTIFICADOR", "<sufijo_id>"]],
-    "<sufijo_id>": [["PAR_ABRE", "<argumentos>", "PAR_CIERRA"], ["ε"]],
+    "<sufijo_id>": [["PAR_ABRE", "<argumentos>", "PAR_CIERRA"], []],
     
-    "<argumentos>": [["<arg_lista>"], ["ε"]],
+    "<argumentos>": [["<arg_lista>"], []],
     "<arg_lista>": [["<expresion>", "<arg_resto>"]],
-    "<arg_resto>": [["COMA", "<expresion>", "<arg_resto>"], ["ε"]]
+    "<arg_resto>": [["COMA", "<expresion>", "<arg_resto>"], []],
 }
 
 # ==========================================
@@ -106,7 +122,7 @@ def calcular_primeros(gramatica):
     # Inicialización base con épsilon
     for nt, producciones in gramatica.items():
         for prod in producciones:
-            if prod[0] == "ε":
+            if prod == []:  # Empty production
                 primeros[nt].add("ε")
 
     cambio = True
@@ -114,6 +130,8 @@ def calcular_primeros(gramatica):
         cambio = False
         for nt, producciones in gramatica.items():
             for prod in producciones:
+                if prod == []:
+                    continue
                 for i, simbolo in enumerate(prod):
                     if es_terminal(simbolo):
                         if simbolo not in primeros[nt]:
@@ -199,33 +217,32 @@ def construir_matriz_ll1(gramatica, primeros, siguientes):
             todas_epsilon = True
             
             # Calcular PRIMERO de la producción específica
-            for s in prod:
-                if s == "ε":
-                    primeros_prod.add("ε")
-                    continue
-                if es_terminal(s):
-                    primeros_prod.add(s)
-                    todas_epsilon = False
-                    break
-                else:
-                    primeros_prod.update(primeros[s] - {"ε"})
-                    if "ε" not in primeros[s]:
+            if prod == []:
+                primeros_prod.add("ε")
+                todas_epsilon = True
+            else:
+                for s in prod:
+                    if es_terminal(s):
+                        primeros_prod.add(s)
                         todas_epsilon = False
                         break
-            if todas_epsilon:
-                primeros_prod.add("ε")
+                    else:
+                        primeros_prod.update(primeros[s] - {"ε"})
+                        if "ε" not in primeros[s]:
+                            todas_epsilon = False
+                            break
+                if todas_epsilon:
+                    primeros_prod.add("ε")
 
             # Mapear a la matriz
             for term in primeros_prod - {"ε"}:
-                # En caso de conflicto LL(1), la tabla guardaría el último encontrado
-                # pero con esta gramática factorizada no debería haber.
                 tabla[nt][term] = prod
 
             # Si la producción puede derivar en ε, usamos los SIGUIENTES
             if "ε" in primeros_prod:
                 for term in siguientes[nt]:
                     tabla[nt][term] = prod
-                    
+                   
     return tabla
 
 # ==========================================
@@ -250,15 +267,15 @@ def obtener_dataframe_tabla():
         en_uso = any(tabla[nt][t] is not None for nt in tabla)
         if en_uso:
             columnas_utiles.append(t)
-            
+           
     df_data = []
     for nt in GRAMATICA_BNF.keys():
         fila = {"No Terminal": nt}
         for t in columnas_utiles:
             prod = tabla[nt][t]
-            fila[t] = " ".join(prod) if prod else ""
+            fila[t] = " ".join(prod) if prod else "ε"
         df_data.append(fila)
-        
+       
     return pd.DataFrame(df_data).set_index("No Terminal")
 
 def obtener_dataframes_conjuntos():
@@ -269,8 +286,8 @@ def obtener_dataframes_conjuntos():
     for nt in GRAMATICA_BNF.keys():
         df_data.append({
             "No Terminal": nt,
-            "PRIMERO": "{ " + ", ".join(primeros[nt]) + " }",
-            "SIGUIENTE": "{ " + ", ".join(siguientes[nt]) + " }"
+            "PRIMERO": "{ " + ", ".join(sorted(primeros[nt])) + " }",
+            "SIGUIENTE": "{ " + ", ".join(sorted(siguientes[nt])) + " }"
         })
     return pd.DataFrame(df_data).set_index("No Terminal")
 

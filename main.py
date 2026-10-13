@@ -19,7 +19,7 @@ from collections import Counter
 from ejemplos import EJEMPLOS
 from lexer import Lexer, TipoToken
 from parser import Parser, ErrorSintactico
-from tabla_ll1 import mostrar_tabla_ll1
+from tabla_ll1 import obtener_dataframe_tabla as mostrar_tabla_ll1
 from arbol_grafico import mostrar_arbol_sintactico
 
 
