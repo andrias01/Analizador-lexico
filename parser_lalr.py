@@ -13,6 +13,45 @@ from typing import Optional, List, Any, Union
 
 
 # =============================================================================
+# LÍMITES DEL DRIVER LR
+# =============================================================================
+# Un shift siempre consume un token, de modo que un análisis LR legítimo
+# termina en O(tokens): el parser no puede quedarse girando sin avanzar.
+# Lo medido sobre la gramática de PaisaScript asciende a 6.74 pasos/token
+# (peor caso observado; 6.0 para declaraciones y 4.5 para expresiones).
+#
+# Por eso el tope de pasos se calcula a partir del tamaño de la entrada y no
+# es un número fijo: con el margen de ~78 % que dejan las constantes de
+# abajo, el límite nunca aprieta en un programa real, pero sigue detectando un
+# bucle que no consume entrada (la única forma de que un LR no termine).
+LIMITE_PASOS_POR_TOKEN = 12
+LIMITE_PASOS_MINIMO = 500
+
+# Foto del árbol por paso: se deja de grabar pasado este umbral para no
+# serializar el AST completo en cada reducción de un programa largo. Es el
+# mismo tope y el mismo criterio que usan parser.py (LIMITE_PASOS) y
+# parser_ll1.py (LIMITE_PASOS_ARBOL); el análisis sigue hasta el final, solo
+# que esa clave queda en None.
+LIMITE_PASOS_ARBOL = 4000
+
+
+def calcular_limite_pasos(n_simbolos_entrada: int,
+                          por_token: int = LIMITE_PASOS_POR_TOKEN,
+                          minimo: int = LIMITE_PASOS_MINIMO) -> int:
+    """Tope de pasos para una entrada de `n_simbolos_entrada` símbolos.
+
+    Args:
+        n_simbolos_entrada: longitud de la entrada ya con el marcador de fin.
+        por_token: pasos permitidos por símbolo de entrada.
+        minimo: piso absoluto, para que las entradas diminutas tengan margen.
+
+    Returns:
+        int: máximo de pasos que debe dar el driver antes de declarar bucle.
+    """
+    return max(minimo, por_token * max(n_simbolos_entrada, 1) + 100)
+
+
+# =============================================================================
 # GRAMÁTICA BNF COMPLETA DE PAISCRIPT (basada en gramatica_BNF_completa.txt)
 # Usa los nombres de tokens del LEXER (KW_DECLARACION, KW_LECTURA, etc.)
 # =============================================================================
@@ -298,11 +337,28 @@ class ParserLALR1:
         return None
 
 
-    def parse_con_pasos(self, tokens):
+    def _foto_arbol(self, nodo, paso):
+        """Serializa `nodo` para la traza, salteándose el tope de memoria.
+
+        Las trazas largas tienen miles de pasos y `NodoAST.a_dict()` serializa
+        el subárbol completo; en las últimas reducciones eso equivale a
+        re-serializar el programa entero paso a paso. Pasado
+        LIMITE_PASOS_ARBOL la clave queda en None, igual que hacen parser.py
+        y parser_ll1.py: el análisis no se corta, solo esa foto.
+        """
+        if nodo is None or paso > LIMITE_PASOS_ARBOL:
+            return None
+        return nodo.a_dict()
+
+    def parse_con_pasos(self, tokens, limite_pasos: Optional[int] = None):
         """Ejecuta el análisis LALR(1) y retorna la traza paso a paso con AST.
         
         Args:
             tokens: lista de tokens (tuples o objetos Token) a analizar
+            limite_pasos: máximo de pasos antes de declarar bucle infinito.
+                Si es None se deriva del tamaño de la entrada con
+                calcular_limite_pasos(), de modo que nunca limita un análisis
+                legítimo. Se expone como parámetro para forzarlo en pruebas.
             
         Returns:
             tuple: (ast, traza, es_valido, errores)
@@ -334,19 +390,41 @@ class ParserLALR1:
         paso = 0
         errores = []
         ast = None
-        
+
+        # Tope de pasos proporcional a la entrada (ver LIMITE_PASOS_*).
+        if limite_pasos is None:
+            limite_pasos = calcular_limite_pasos(len(entrada))
+            origen_limite = (f"{LIMITE_PASOS_POR_TOKEN}×{len(entrada)} símbolos "
+                             f"de entrada + margen")
+        else:
+            origen_limite = "valor fijado por el llamador"
+
         while True:
             paso += 1
-            
-            # Safety limit to prevent infinite loops
-            if paso > 200:
-                error_msg = f"Paso {paso}: Límite de pasos excedido (posible bucle infinito)"
-                errores.append(error_msg)
-                break
             
             # Obtener estado actual (de la cima de la pila) y símbolo de entrada
             estado_actual = pila[-1][1] if pila else 0
             simbolo_entrada = entrada[0] if entrada else None
+
+            # Tope de seguridad contra bucles infinitos. Todo shift consume un
+            # token, así que un análisis legítimo jamás llega aquí: solo lo
+            # alcanza un bucle que no avanza la entrada.
+            if paso > limite_pasos:
+                error_msg = (
+                    f"Paso {paso}: Límite de pasos excedido "
+                    f"({limite_pasos} = {origen_limite}); posible bucle "
+                    f"infinito en la tabla ACTION/GOTO (estado {estado_actual})"
+                )
+                errores.append(error_msg)
+                _registrar({
+                    'Paso': paso,
+                    'Acción': 'error (límite de pasos)',
+                    'Pila': [s[0] for s in pila],
+                    'Entrada': [e.tipo if hasattr(e, 'tipo') else str(e)
+                                for e in entrada],
+                    'Arbol': self._foto_arbol(pila_nodos[-1], paso),
+                })
+                break
             
             # Determinar acción usando el estado actual
             accion = self._obtener_accion(estado_actual, simbolo_entrada)
@@ -362,7 +440,7 @@ class ParserLALR1:
                     'Acción': 'error',
                     'Pila': [s[0] for s in pila],
                     'Entrada': [e.tipo if hasattr(e, 'tipo') else str(e) for e in entrada],
-                    'Arbol': pila_nodos[-1].a_dict() if pila_nodos[-1] else None,
+                    'Arbol': self._foto_arbol(pila_nodos[-1], paso),
                 })
                 break
             
@@ -393,7 +471,7 @@ class ParserLALR1:
                     'Acción': f'shift a estado {numero_estado}',
                     'Pila': [s[0] for s in pila],
                     'Entrada': [e.tipo if hasattr(e, 'tipo') else str(e) for e in entrada],
-                    'Arbol': pila_nodos[-1].a_dict(),
+                    'Arbol': self._foto_arbol(pila_nodos[-1], paso),
                 })
                 
             elif accion.startswith('r'):
@@ -407,7 +485,7 @@ class ParserLALR1:
                         'Acción': f'reduce ERROR (prod {prod_num})',
                         'Pila': [s[0] for s in pila],
                         'Entrada': [e.tipo if hasattr(e, 'tipo') else str(e) for e in entrada],
-                        'Arbol': pila_nodos[-1].a_dict() if pila_nodos[-1] else None,
+                        'Arbol': self._foto_arbol(pila_nodos[-1], paso),
                     })
                     break
                 
@@ -426,7 +504,7 @@ class ParserLALR1:
                         'Acción': f'reduce ERROR (pila corta)',
                         'Pila': [s[0] for s in pila],
                         'Entrada': [e.tipo if hasattr(e, 'tipo') else str(e) for e in entrada],
-                        'Arbol': pila_nodos[-1].a_dict() if pila_nodos[-1] else None,
+                        'Arbol': self._foto_arbol(pila_nodos[-1], paso),
                     })
                     break
                 
@@ -452,7 +530,7 @@ class ParserLALR1:
                         'Acción': f'reduce {prod_num}: {nt} → {_rhs_legible(prod_simbolos)}',
                         'Pila': [s[0] for s in pila],
                         'Entrada': [e.tipo if hasattr(e, 'tipo') else str(e) for e in entrada],
-                        'Arbol': pila_nodos[-1].a_dict() if pila_nodos[-1] else None,
+                        'Arbol': self._foto_arbol(pila_nodos[-1], paso),
                     })
                     break
                 
@@ -468,7 +546,7 @@ class ParserLALR1:
                         'Acción': f'reduce {prod_num}: {nt} → {_rhs_legible(prod_simbolos)} (accept)',
                         'Pila': [s[0] for s in pila] + [nt],
                         'Entrada': [e.tipo if hasattr(e, 'tipo') else str(e) for e in entrada],
-                        'Arbol': nodo_raiz.a_dict(),
+                        'Arbol': self._foto_arbol(nodo_raiz, paso),
                     })
                     return nodo_raiz, traza, True, []
                 
@@ -484,7 +562,7 @@ class ParserLALR1:
                         'Acción': f'reduce {prod_num}: {nt} → {_rhs_legible(prod_simbolos)}',
                         'Pila': [s[0] for s in pila],
                         'Entrada': [e.tipo if hasattr(e, 'tipo') else str(e) for e in entrada],
-                        'Arbol': pila_nodos[-1].a_dict() if pila_nodos[-1] else None,
+                        'Arbol': self._foto_arbol(pila_nodos[-1], paso),
                     })
                     break
                 
@@ -502,7 +580,7 @@ class ParserLALR1:
                     'Acción': f'reduce {prod_num}: {nt} → {_rhs_legible(prod_simbolos)}',
                     'Pila': [s[0] for s in pila],
                     'Entrada': [e.tipo if hasattr(e, 'tipo') else str(e) for e in entrada],
-                    'Arbol': nodo_padre.a_dict(),
+                    'Arbol': self._foto_arbol(nodo_padre, paso),
                 })
                 
             elif accion == 'acc':
@@ -536,7 +614,7 @@ class ParserLALR1:
                     'Acción': 'accept',
                     'Pila': [s[0] for s in pila],
                     'Entrada': [],
-                    'Arbol': ast.a_dict() if ast else None,
+                    'Arbol': self._foto_arbol(ast, paso),
                 })
                 traza_final = traza
                 return ast, traza_final, True, []
@@ -549,7 +627,7 @@ class ParserLALR1:
                     'Acción': accion,
                     'Pila': [s[0] for s in pila],
                     'Entrada': [e.tipo if hasattr(e, 'tipo') else str(e) for e in entrada],
-                    'Arbol': pila_nodos[-1].a_dict() if pila_nodos[-1] else None,
+                    'Arbol': self._foto_arbol(pila_nodos[-1], paso),
                 })
                 break
         

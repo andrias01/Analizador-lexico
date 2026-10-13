@@ -37,6 +37,12 @@ try:
 except ImportError:
     post_procesar_lalr1 = None
 
+# Pasos que se despliegan por defecto en el "Detalle por paso" de la traza
+# LALR(1). La traza completa puede tener miles de pasos (el driver ya no tiene
+# tope fijo) y un expander por paso saturaría Streamlit, así que se muestra una
+# ventana navegable; la tabla y el CSV de arriba siempre llevan la traza entera.
+N_PASOS_DETALLE = 30
+
 # --- IMPORTACIÓN DEL ASISTENTE DE IA ---
 from ai_assistant import analizar_error_con_ia, origen_api_key
 
@@ -803,9 +809,9 @@ with pestañas[3]:
             df_traza = pd.DataFrame(filas_traza)
             st.dataframe(df_traza, use_container_width=True, hide_index=True)
             st.caption(
-                "La pila se lee de abajo hacia arriba como `símbolo·estado`; el estado junto a un "
-                "símbolo es el alcanzado al consumirlo. **El último estado de un paso es el tope "
-                "con el que se consulta ACTION\[estado\]\[token\] en el paso siguiente.**"
+                r"La pila se lee de abajo hacia arriba como `símbolo·estado`; el estado junto a un "
+                r"símbolo es el alcanzado al consumirlo. **El último estado de un paso es el tope "
+                r"con el que se consulta ACTION\[estado\]\[token\] en el paso siguiente.**"
             )
             st.download_button(
                 "⬇️ Descargar traza completa (CSV)",
@@ -815,9 +821,39 @@ with pestañas[3]:
                 key="dl_traza",
             )
             
-            # Mostrar detalle por paso en expanders
+            # --- Detalle por paso: ventana navegable sobre la traza --------
+            # Las trazas largas pueden tener miles de pasos (el driver ya no
+            # tiene tope fijo) y un expander por paso saturaría Streamlit, así
+            # que se despliega una ventana seleccionable. La tabla y el CSV de
+            # arriba siempre tienen la traza completa.
             st.markdown("### Detalle por paso")
-            for paso in traza_ll1:
+            total_pasos = len(traza_ll1)
+            clave_ventana = "traza_lalr_ventana"
+            clave_firma_traza = "traza_lalr_firma"
+
+            # Si cambió el código (y por lo tanto la cantidad de pasos), se
+            # descarta la ventana guardada para no quedar apuntando fuera de
+            # rango. Es el mismo criterio que usa renderizar_stepper_arbol.
+            firma_traza = f"lalr:{total_pasos}"
+            if st.session_state.get(clave_firma_traza) != firma_traza:
+                st.session_state[clave_firma_traza] = firma_traza
+                st.session_state.pop(clave_ventana, None)
+
+            if total_pasos > N_PASOS_DETALLE:
+                tope = min(N_PASOS_DETALLE, total_pasos)
+                rango = st.slider(
+                    "Rango de pasos a detallar", 1, total_pasos,
+                    (1, tope), key=clave_ventana)
+                ventana = traza_ll1[rango[0] - 1:rango[1]]
+                st.caption(
+                    f"Mostrando {len(ventana)} de {total_pasos} pasos "
+                    f"(pasos {rango[0]}–{rango[1]}). La tabla y el CSV de "
+                    f"arriba tienen la traza completa."
+                )
+            else:
+                ventana = traza_ll1
+
+            for paso in ventana:
                 with st.expander(f"Paso {paso['Paso']}: {paso['Acción']}"):
                     col1, col2 = st.columns(2)
                     with col1:

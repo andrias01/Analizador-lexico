@@ -52,7 +52,7 @@ cosas:
 |---|---|---|
 | **E1.** Analizador LALR(1) integrado | ✅ **Completo** | **Driver LR real** en `parser_lalr.py`: `ParserLALR1.parse_con_pasos()` (`:301`) es el bucle pila-estados / entrada con `desplazar`, `reducir`, `aceptar` y `error`. Se integra en la app en `app.py:322-357`, donde el método 3 **sustituye** al motor LL(1): los errores que se muestran en las pestañas AST y "Errores" provienen del LALR(1), no del LL(1). |
 | **E2.** Tabla ACTION/GOTO completa | ✅ **Completo** | **ACTION y GOTO reales, indexadas por estado**, construidas desde los items del autómata fusionado: `_construir_tabla_action_estados` (`parser_lalr.py:153`) y `extract_goto_lalr1` (`generador_lalr1_completo.py:244`). `construir_dataframes_lalr1` (`parser_lalr.py:616`) las expone como **ACTION 195 × 55** y **GOTO 195 × 52**, con CSV descargable y leyenda de `r{k}`. |
-| **E3.** Traza paso a paso LALR | ✅ **Completo** | `parse_con_pasos` devuelve `(árbol, traza, válido, error)` con **`Paso` · `Pila` · `Entrada` · `Acción`** más la lista **`Estados`** de la pila. La app la renderiza en la pestaña "Traza LALR(1)" (`app.py:743`) como `Pila (símbolo·estado)` · `Entrada restante` · `Acción`, con detalle por paso en expanders y descarga CSV. |
+| **E3.** Traza paso a paso LALR | ✅ **Completo** | `parse_con_pasos` devuelve `(árbol, traza, válido, error)` con **`Paso` · `Pila` · `Entrada` · `Acción`** más la lista **`Estados`** de la pila. La app la renderiza en la pestaña "Traza LALR(1)" (`app.py:743`) como `Pila (símbolo·estado)` · `Entrada restante` · `Acción`, con detalle por paso en una ventana seleccionable de expanders y descarga CSV. |
 | **50 % preguntas** | 📚 Cubierto por este documento | Sección F. |
 
 ### Cifras verificadas (para citar sin dudar)
@@ -236,6 +236,22 @@ permite leer la traza sin tener que contar niveles en el texto plano.
   el nombre del tipo ya dice todo. Es lo que hace legible una pila como
   `$·0 KW_IMPRESION·17 PAR_ABRE·33 NUM_ENTERO(42)·50` en lugar de
   `$·0 KW_IMPRESION(hable_pues)·17 PAR_ABRE(()·33 NUM_ENTERO(42)·50`.
+* **El tope de pasos se deriva de la entrada, no es un número fijo.** El
+  argumento de fondo: **todo `shift` consume un token**, así que un análisis
+  LR legítimo termina en O(tokens) y no puede quedarse girando. Lo medido en
+  esta gramática es **6.74 pasos/token** (peor caso observado: 6.0 en
+  declaraciones, 4.5 en expresiones), y el tope usa **12** por token
+  (`parser_lalr.py`, `LIMITE_PASOS_POR_TOKEN`), un margen de ~78 % que
+  garantiza que **nunca aprieta en un programa real** pero sigue detectando un
+  bucle que no avanza la entrada, que es la única forma real de que un LR no
+  termine. Consecuencia práctica: un programa de 100 sentencias (~400 tokens)
+  tiene un tope de ~4900 pasos y en realidad usa 2702.
+* **La foto del árbol por paso se corta en `LIMITE_PASOS_ARBOL = 4000`**,
+  igual que `parser.py` y `parser_ll1.py`. `NodoAST.a_dict()` serializa el
+  subárbol completo, y en las últimas reducciones eso equivale a re-serializar
+  el programa entero paso a paso: sin el corte, 200 sentencias pasaban de
+  1.04 s a 0.28 s con él. El análisis no se corta, solo esa clave queda en
+  `None`.
 
 ---
 
@@ -332,7 +348,7 @@ Barra lateral → **`3. Ascendente LALR(1)`** (`app.py:459`). La generación tar
 
 | Pestaña | Contenido |
 |---|---|
-| **Traza LALR(1)** (`app.py:743`) | DataFrame `Paso / Pila (símbolo·estado) / Entrada restante / Acción`, con la leyenda de `r{k}`, un expander por paso (estado tope, árbol parcial), y **descarga CSV**. Arriba: `st.success("Análisis LALR(1) completado con éxito")` si terminó en `acc`, o el aviso de error si no. |
+| **Traza LALR(1)** (`app.py:743`) | DataFrame `Paso / Pila (símbolo·estado) / Entrada restante / Acción`, con la leyenda de `r{k}`, un **selector de rango de pasos** (por defecto 30, para que las trazas de miles de pasos no saturen la interfaz) con expanders por paso (estado tope, árbol parcial), y **descarga CSV**. Arriba: `st.success("Análisis LALR(1) completado con éxito")` si terminó en `acc`, o el aviso de error si no. |
 | **Tabla ACTION/GOTO** (`app.py:873`) | **ACTION 195 × 55** y **GOTO 195 × 52** con descarga CSV cada una, leyenda de las 106 producciones (`r{k}` → `nt → β`), leyenda de notación (`s`/`r`/`acc`/vacío) y un **🔎 Inspector de estado**: al elegir un estado muestra sus acciones, sus transiciones GOTO y sus **items LALR(1) con el punto y el lookahead**. |
 
 Las demás pestañas (AST, tablas LL(1), tabla de símbolos, errores, IA) siguen
