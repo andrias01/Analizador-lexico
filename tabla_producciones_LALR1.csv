@@ -1,0 +1,107 @@
+k,No-terminal,Producción
+1,<arg_lista>,<expresion> <arg_resto>
+2,<arg_resto>,COMA <expresion> <arg_resto>
+3,<arg_resto>,ε
+4,<argumentos>,<arg_lista>
+5,<argumentos>,ε
+6,<bloque>,<sentencia> <lista_sentencias>
+7,<caso>,<patron> KW_FLECHA <cuerpo_caso>
+8,<cuerpo_caso>,LLAVE_ABRE <bloque> LLAVE_CIERRA
+9,<cuerpo_caso>,<sentencia>
+10,<declaracion>,<def_funcion>
+11,<declaracion>,<sentencia>
+12,<def_funcion>,KW_FUNCION IDENTIFICADOR PAR_ABRE <parametros> PAR_CIERRA <tipo_retorno> KW_HACER <bloque> KW_FIN_FUNCION
+13,<expr_aditiva>,<expr_multiplicativa> <expr_aditiva_p>
+14,<expr_aditiva_p>,OP_SUMA <expr_multiplicativa> <expr_aditiva_p>
+15,<expr_aditiva_p>,OP_RESTA <expr_multiplicativa> <expr_aditiva_p>
+16,<expr_aditiva_p>,ε
+17,<expr_concat>,<expr_aditiva> <expr_concat_p>
+18,<expr_concat_p>,OP_CONCAT <expr_aditiva> <expr_concat_p>
+19,<expr_concat_p>,ε
+20,<expr_igualdad>,<expr_relacional> <expr_igualdad_p>
+21,<expr_igualdad_p>,OP_IGUAL <expr_relacional> <expr_igualdad_p>
+22,<expr_igualdad_p>,OP_DISTINTO <expr_relacional> <expr_igualdad_p>
+23,<expr_igualdad_p>,ε
+24,<expr_multiplicativa>,<expr_potencia> <expr_multiplicativa_p>
+25,<expr_multiplicativa_p>,OP_MULT <expr_potencia> <expr_multiplicativa_p>
+26,<expr_multiplicativa_p>,OP_DIV <expr_potencia> <expr_multiplicativa_p>
+27,<expr_multiplicativa_p>,OP_MODULO <expr_potencia> <expr_multiplicativa_p>
+28,<expr_multiplicativa_p>,ε
+29,<expr_o>,<expr_y> <expr_o_p>
+30,<expr_o_p>,OP_O <expr_y> <expr_o_p>
+31,<expr_o_p>,ε
+32,<expr_potencia>,<expr_unaria> <expr_potencia_p>
+33,<expr_potencia_p>,OP_POTENCIA <expr_potencia>
+34,<expr_potencia_p>,ε
+35,<expr_primaria>,PAR_ABRE <expresion> PAR_CIERRA
+36,<expr_primaria>,NUM_ENTERO
+37,<expr_primaria>,NUM_REAL
+38,<expr_primaria>,CADENA_LITERAL
+39,<expr_primaria>,LIT_VERDADERO
+40,<expr_primaria>,LIT_FALSO
+41,<expr_primaria>,IDENTIFICADOR <sufijo_id>
+42,<expr_relacional>,<expr_concat> <expr_relacional_p>
+43,<expr_relacional_p>,OP_MAYOR <expr_concat> <expr_relacional_p>
+44,<expr_relacional_p>,OP_MENOR <expr_concat> <expr_relacional_p>
+45,<expr_relacional_p>,OP_MAYOR_IGUAL <expr_concat> <expr_relacional_p>
+46,<expr_relacional_p>,OP_MENOR_IGUAL <expr_concat> <expr_relacional_p>
+47,<expr_relacional_p>,ε
+48,<expr_unaria>,OP_NO <expr_unaria>
+49,<expr_unaria>,OP_RESTA <expr_unaria>
+50,<expr_unaria>,<expr_primaria>
+51,<expr_y>,<expr_igualdad> <expr_y_p>
+52,<expr_y_p>,OP_Y <expr_igualdad> <expr_y_p>
+53,<expr_y_p>,ε
+54,<expresion>,<expr_o>
+55,<lista_casos>,<caso> <lista_casos_resto>
+56,<lista_casos_resto>,<caso> <lista_casos_resto>
+57,<lista_casos_resto>,ε
+58,<lista_declaraciones>,<declaracion> <lista_declaraciones>
+59,<lista_declaraciones>,ε
+60,<lista_sentencias>,<sentencia> <lista_sentencias>
+61,<lista_sentencias>,ε
+62,<param_lista>,<tipo> IDENTIFICADOR <param_resto>
+63,<param_resto>,COMA <tipo> IDENTIFICADOR <param_resto>
+64,<param_resto>,ε
+65,<parametros>,<param_lista>
+66,<parametros>,ε
+67,<paso_opcional>,KW_PASO <expresion>
+68,<paso_opcional>,ε
+69,<patron>,NUM_ENTERO
+70,<patron>,NUM_REAL
+71,<patron>,CADENA_LITERAL
+72,<patron>,LIT_VERDADERO
+73,<patron>,LIT_FALSO
+74,<patron>,IDENTIFICADOR
+75,<patron>,COMODIN
+76,<programa>,<lista_declaraciones>
+77,<rama_sino>,KW_SINO <bloque>
+78,<rama_sino>,ε
+79,<sent_declaracion>,KW_DECLARACION <tipo_opcional> IDENTIFICADOR OP_ASIGNACION <expresion>
+80,<sent_impresion>,KW_IMPRESION PAR_ABRE <expresion> PAR_CIERRA
+81,<sent_lectura>,KW_LECTURA PAR_ABRE IDENTIFICADOR PAR_CIERRA
+82,<sent_llamada>,IDENTIFICADOR PAR_ABRE <argumentos> PAR_CIERRA
+83,<sent_mientras>,KW_MIENTRAS <expresion> KW_HACER <bloque> KW_FIN_MIENTRAS
+84,<sent_para>,KW_PARA IDENTIFICADOR KW_DESDE <expresion> KW_HASTA <expresion> <paso_opcional> KW_HACER <bloque> KW_FIN_PARA
+85,<sent_pillemos>,KW_PILLEMOS <expresion> LLAVE_ABRE <lista_casos> LLAVE_CIERRA
+86,<sent_retornar>,KW_RETORNAR <expresion>
+87,<sent_si>,KW_SI <expresion> KW_ENTONCES <bloque> <rama_sino> KW_FIN_SI
+88,<sentencia>,<sent_declaracion>
+89,<sentencia>,<sent_lectura>
+90,<sentencia>,<sent_impresion>
+91,<sentencia>,<sent_si>
+92,<sentencia>,<sent_mientras>
+93,<sentencia>,<sent_para>
+94,<sentencia>,<sent_pillemos>
+95,<sentencia>,<sent_retornar>
+96,<sentencia>,<sent_llamada>
+97,<sufijo_id>,PAR_ABRE <argumentos> PAR_CIERRA
+98,<sufijo_id>,ε
+99,<tipo>,KW_TIPO_ENTERO
+100,<tipo>,KW_TIPO_REAL
+101,<tipo>,KW_TIPO_CADENA
+102,<tipo>,KW_TIPO_BOOLEANO
+103,<tipo_opcional>,<tipo>
+104,<tipo_opcional>,ε
+105,<tipo_retorno>,KW_FLECHA <tipo>
+106,<tipo_retorno>,ε
