@@ -20,7 +20,8 @@ Un programa Paisascript es una secuencia de declaraciones de funcion y
 sentencias de nivel superior. El lenguaje es libre de formato: los saltos de
 linea y la indentacion no son significativos; sirven unicamente como
 separadores de tokens. Cada construccion de bloque se cierra con una palabra
-reservada explicita (ya_quedo, asi_quedo, hasta_ahi, listo_pues), lo que
+reservada explicita (ya_quedo, asi_quedo, hasta_ahi, listo_pues,
+hasta_que), lo que
 elimina toda ambiguedad de anidamiento sin depender de la indentacion.
 
 --- 1.2 Tipos de datos --------------------------------------------------------
@@ -80,6 +81,8 @@ comentario pueda copiarse literalmente al codigo generado.
   hasta            KW_HASTA              limite superior       list.range(_, b)
   de_a             KW_PASO               incremento del paso   (paso explicito)
   listo_pues       KW_FIN_PARA           cierre del para       }
+  repita_pues      KW_REPITA             bucle post-test       recursion de cola
+  hasta_que        KW_HASTA_QUE          condicion de salida   case (caso base)
   pillemos         KW_PILLEMOS           calce de patrones     case
   pa_que_lleve     KW_FLECHA             flecha de caso / tipo ->
 
@@ -207,6 +210,7 @@ comentario pueda copiarse literalmente al codigo generado.
                           | <sent_si>
                           | <sent_mientras>
                           | <sent_para>
+                          | <sent_repita>
                           | <sent_pillemos>
                           | <sent_retornar>
                           | <sent_llamada>
@@ -263,7 +267,23 @@ comentario pueda copiarse literalmente al codigo generado.
                           | e
 
 /* ---------------------------------------------------------------- */
-/* 3.7  Calce de patrones  (equivale al `case` de Gleam)            */
+/* 3.7  Repeticion con condicion al final  (do-while / repeat-until)*/
+/* ---------------------------------------------------------------- */
+
+<sent_repita>           ::= repita_pues
+                                <bloque>
+                            hasta_que <expresion>
+
+/* El cuerpo se ejecuta AL MENOS UNA VEZ y hasta_que da la condicion de  */
+/* SALIDA (no de permanencia): el bucle repite mientras la expresion sea */
+/* falsa. hasta_que cierra el bloque, de modo que no hace falta una      */
+/* palabra de cierre adicional. La condicion se evalua DENTRO del ambito */
+/* del cuerpo, asi que puede leer las variables que el cuerpo acaba de   */
+/* crear: es el mismo estado que el generador pasa a la recursion de     */
+/* cola de Gleam.                                                       */
+
+/* ---------------------------------------------------------------- */
+/* 3.8  Calce de patrones  (equivale al `case` de Gleam)            */
 /* ---------------------------------------------------------------- */
 
 <sent_pillemos>         ::= pillemos <expresion> "{" <lista_casos> "}"
@@ -287,7 +307,7 @@ comentario pueda copiarse literalmente al codigo generado.
                           | "_"                /* comodin, descarta el valor  */
 
 /* ---------------------------------------------------------------- */
-/* 3.8  Expresiones                                                 */
+/* 3.9  Expresiones                                                 */
 /*      Jerarquia de precedencia, de menor a mayor:                 */
 /*        o_que < y_tambien < igualdad < relacional < <>            */
 /*              < +,- < *,/,% < ** < unarios < primaria             */
@@ -404,8 +424,8 @@ PRIMERO(<def_funcion>)
 
 PRIMERO(<sentencia>)
   = { pille_pues, escuche_pues, hable_pues, si_acaso, mientras_que,
-      pa_cada, pillemos, entregue_pues, IDENTIFICADOR }
-  Las nueve alternativas de <sentencia> arrancan cada una con un terminal
+      pa_cada, repita_pues, pillemos, entregue_pues, IDENTIFICADOR }
+  Las diez alternativas de <sentencia> arrancan cada una con un terminal
   DISTINTO, por lo que sus conjuntos PRIMERO son disjuntos dos a dos. (C1) OK.
 
 PRIMERO(<declaracion>)
@@ -432,7 +452,8 @@ PRIMERO(<patron>)
 
 SIGUIENTE(<lista_declaraciones>) = { $ }
 SIGUIENTE(<lista_sentencias>)    = { ya_quedo, asi_quedo, sino_pues,
-                                     hasta_ahi, listo_pues, "}" }
+                                     hasta_ahi, listo_pues, hasta_que,
+                                     "}" }
 SIGUIENTE(<rama_sino>)           = { asi_quedo }
 SIGUIENTE(<paso_opcional>)       = { dele_pues }
 SIGUIENTE(<tipo_retorno>)        = { dele_pues }
@@ -444,7 +465,8 @@ SIGUIENTE(<arg_resto>)           = { ")" }
 SIGUIENTE(<sufijo_id>)           = SIGUIENTE(<expr_primaria>)
                                  = todos los operadores binarios union
                                    { ")", "}", ",", entonces_pues,
-                                     dele_pues, hasta, de_a, "{", $ } union
+                                     dele_pues, hasta, de_a, hasta_que,
+                                     "{", $ } union
                                    PRIMERO(<sentencia>)
 SIGUIENTE(<lista_casos_resto>)   = { "}" }
 
@@ -474,7 +496,8 @@ SIGUIENTE(<lista_casos_resto>)   = { "}" }
   <expr_potencia_p>       { "**" }                    ...             SI
 
   (*1) Las palabras de cierre ya_quedo, asi_quedo, sino_pues, hasta_ahi,
-       listo_pues son reservadas: ninguna sentencia puede empezar con ellas,
+       listo_pues y hasta_que son reservadas: ninguna sentencia puede
+       empezar con ellas,
        ni pueden confundirse con un IDENTIFICADOR.
 
   (*2) numerito, quebradito, cuento y siono son palabras reservadas, de modo
@@ -558,7 +581,18 @@ unico token de anticipacion, sin retroceso.
     pille_pues quebradito area = 3.1416 * radio ** 2
     hable_pues(area)
 
---- 5.5 Calce de patrones y operadores logicos --------------------------------
+--- 5.5 Bucle repita con condicion al final -----------------------------------
+
+    // El cuerpo corre al menos una vez: se pide la clave y SOLO despues se
+    // comprueba si hay que volver a pedirla.
+    pille_pues numerito intentos = 0
+    repita_pues
+        escuche_pues(clave)
+        pille_pues intentos = intentos + 1
+        hable_pues("Intento numero " <> intentos)
+    hasta_que clave igualito "abreme" o_que intentos >= 3
+
+--- 5.6 Calce de patrones y operadores logicos --------------------------------
 
     pillemos resultado {
         10       pa_que_lleve hable_pues("Sacaste diez, que elegancia")
@@ -572,7 +606,7 @@ unico token de anticipacion, sin retroceso.
 
     pille_pues siono valido = nanai (edad < 18) o_que tiene_permiso
 
---- 5.6 Programa completo de mediana complejidad ------------------------------
+--- 5.7 Programa completo de mediana complejidad ------------------------------
 
     // Determina si un numero es primo y lista los primos hasta un limite
     hagale_pues es_primo(numerito n) pa_que_lleve siono dele_pues
@@ -638,6 +672,23 @@ unico token de anticipacion, sin retroceso.
     pille_pues y = 3 + 2.5              // Gleam no mezcla Int con Float
     hable_pues(variable_no_declarada)   // identificador fuera de alcance
     pille_pues z = sumar(1)             // aridad incorrecta en la llamada
+
+    // Reglas propias de los bucles (SEM-6, SEM-7 y SEM-8):
+    pille_pues numerito tope = 10
+    mientras_que tope > 0 dele_pues     // SEM-6: el cuerpo no toca 'tope',
+        hable_pues("hola")              //        el bucle no puede terminar
+    hasta_ahi
+
+    pa_cada i desde 1 hasta 3 dele_pues // SEM-7: 'i' es de solo lectura
+        pille_pues i = 99               //        dentro del bucle
+    listo_pues
+
+    pa_cada j desde 1 hasta 9 de_a 0    // SEM-8: paso 0, nunca avanza
+    dele_pues hable_pues(j) listo_pues
+
+    pa_cada k desde 10 hasta 1 dele_pues // SEM-8: paso +1 con desde > hasta,
+        hable_pues(k)                    //        el cuerpo nunca se ejecuta
+    listo_pues
 
 
 ================================================================================
@@ -734,6 +785,16 @@ unico token de anticipacion, sin retroceso.
   pa_cada i desde a hasta b de_a p         (recursion de cola con incremento p,
   dele_pues B listo_pues                   list.range no admite paso)
 
+  repita_pues B hasta_que c                fn bucle(estado) {
+                                             let estado = B'      // cuerpo
+                                             case c {             // primero
+                                               True  -> estado
+                                               False -> bucle(estado)
+                                             }
+                                           }
+                                           (el cuerpo va ANTES del case, por
+                                           eso corre al menos una vez)
+
   entregue_pues e                          e  como ultima expresion del cuerpo;
                                            un retorno anticipado se reestructura
                                            en las ramas del `case`
@@ -777,6 +838,13 @@ definida. Ese trabajo lo hara el generador de codigo de la entrega final:
   c) `pa_cada` con paso 1 se traduce a `list.range` compuesto con `list.each`
      o `list.fold`; con paso distinto de 1 se traduce a una funcion recursiva
      de cola, porque `list.range` de Gleam no admite incremento.
+
+  c2) `repita_pues` usa la MISMA recursion de cola que `mientras_que`, con una
+     diferencia: el cuerpo se emite ANTES del `case`, no dentro de su rama
+     verdadera. Eso reproduce exactamente la semantica post-test (el cuerpo
+     corre al menos una vez) y explica por que `hasta_que` es la condicion de
+     salida: en el `case` generado, True devuelve el estado (caso base) y
+     False vuelve a llamar a la funcion auxiliar.
 
   d) `entregue_pues` en posicion final es simplemente la ultima expresion del
      cuerpo. En posicion anticipada (como en `es_primo` del 5.6) se elimina

@@ -116,10 +116,10 @@ Ambas interfaces ofrecen los mismos tres (requisito 11 del enunciado):
 | `gramatica_BNF_Paisascript.txt` | Gramática BNF completa: descripción informal, terminales por categoría, 54 reglas de producción sin recursividad izquierda, **verificación LL(1)**, ejemplos válidos e inválidos y justificación de coherencia con Gleam |
 | `lexer.py` | **Módulo reutilizable** del analizador léxico. No imprime ni lee nada |
 | `parser.py` | Analizador sintáctico descendente recursivo LL(1); construye el CST con posición en cada hoja |
-| `analizador_semantico.py` | **Fase semántica independiente**: visitor sobre el CST, tabla de símbolos por ámbitos y reglas SEM-1 a SEM-5 |
+| `analizador_semantico.py` | **Fase semántica independiente**: visitor sobre el CST, tabla de símbolos por ámbitos y reglas SEM-1 a SEM-8 |
 | `app.py` | Interfaz web en Streamlit |
 | `main.py` | Interfaz de consola con colores ANSI |
-| `ejemplos.py` | Las diez cadenas predefinidas (incluye ejemplos semánticos) |
+| `ejemplos.py` | Las trece cadenas predefinidas (incluye los tres bucles y los ejemplos semánticos) |
 | `test_semantico.py` | Pruebas automáticas del análisis semántico (sin Streamlit ni pandas) |
 | `generar_documento_semantico.py` | Genera el PDF de la Parte 1 (gramática en rojo + reglas en ámbar) |
 | `gramatica_ampliada_semantica.pdf` | Documento entregable del Quiz 4 / Entrega 4 |
@@ -166,6 +166,7 @@ en la práctica: `app.py` se construyó después, sin modificar una sola línea 
 | `si_acaso` … `entonces_pues` … `sino_pues` … `asi_quedo` | `if` / `else` | `case c { True -> … False -> … }` |
 | `mientras_que` … `dele_pues` … `hasta_ahi` | `while` | recursión de cola |
 | `pa_cada` … `desde` … `hasta` … `de_a` … `dele_pues` … `listo_pues` | `for` | `list.range` + `list.each` |
+| `repita_pues` … `hasta_que` | `do … while` / `repeat … until` | recursión de cola con el cuerpo antes del `case` |
 | `pillemos` … `pa_que_lleve` | `switch` / `match` | `case` … `->` |
 
 ### Literales y operadores con nombre
@@ -252,6 +253,20 @@ pa_cada k desde 0 hasta 20 de_a 2 dele_pues
 listo_pues
 ```
 
+### Bucle `repita_pues` con condición al final
+
+El tercer bucle. El cuerpo corre al menos una vez y `hasta_que` es la
+condición de **salida**, no de permanencia.
+
+```
+pille_pues numerito intentos = 0
+repita_pues
+    escuche_pues(clave)
+    pille_pues intentos = intentos + 1
+    hable_pues("Intento numero " <> intentos)
+hasta_que clave igualito "abreme" o_que intentos >= 3
+```
+
 ### Calce de patrones
 
 ```
@@ -325,7 +340,7 @@ condicionó el diseño de Paisascript:
 - **`NUM_ENTERO` y `NUM_REAL` son tokens distintos** desde el análisis léxico,
   porque Gleam usa operadores diferentes para cada tipo (`+` contra `+.`).
 - **Los bloques se cierran con palabra reservada** (`ya_quedo`, `asi_quedo`,
-  `hasta_ahi`, `listo_pues`), lo que hace la gramática LL(1) sin tokens de
+  `hasta_ahi`, `listo_pues`, `hasta_que`), lo que hace la gramática LL(1) sin tokens de
   indentación y se traduce directo a la llave de cierre de Gleam.
 - **`pillemos` y `<>` se tomaron prestados de Gleam**: la traducción es token a
   token.
@@ -337,6 +352,7 @@ Los cuatro constructos que el enunciado exige y Gleam no tiene se traducen así:
 | `si_acaso` / `sino_pues` | `case c { True -> … False -> … }` |
 | `mientras_que` | función auxiliar recursiva de cola |
 | `pa_cada` | `list.range` + `list.each`, o recursión de cola si el paso ≠ 1 |
+| `repita_pues` | la misma recursión de cola, con el cuerpo emitido **antes** del `case` |
 | `entregue_pues` | última expresión del cuerpo; el retorno anticipado se reestructura en las ramas del `case` |
 
 Las traducciones trabajadas de punta a punta están en
@@ -375,19 +391,44 @@ Las traducciones trabajadas de punta a punta están en
 | SEM-1 | `<sent_declaracion>` | El tipo anotado coincide con el tipo inferido de la expresión |
 | SEM-2 | `<expr_primaria>`, `<sent_lectura>` | El identificador está declarado en el ámbito actual o en un ancestro |
 | SEM-3 | Producciones de expresiones | Operandos compatibles; `%` solo `numerito`; lógicos/condiciones `siono` |
-| SEM-4 | `<sent_si>`, `<sent_mientras>` | La condición de control es `siono` |
+| SEM-4 | `<sent_si>`, `<sent_mientras>`, `<sent_repita>` | La condición de control es `siono` |
 | SEM-5 | `<sent_llamada>`, `<sufijo_id>` | La función existe, la aridad coincide y los tipos de argumento son correctos |
+| SEM-6 | `<sent_mientras>`, `<sent_repita>` | El cuerpo redefine alguna variable de la condición: el bucle puede terminar |
+| SEM-7 | `<sent_para>` y su `<bloque>` | La variable de control es de solo lectura dentro del bucle |
+| SEM-8 | `<sent_para>`, `<paso_opcional>` | El paso no es 0 y su signo concuerda con los límites: el recorrido existe |
+
+Las tres últimas son **reglas de bucle**, y existen precisamente porque Gleam no
+tiene bucles: los tres de Paisascript se traducen a recursión de cola, así que un
+bucle sin progreso no se cuelga en ejecución sino que genera una función recursiva
+que nunca alcanza su caso base. Ver la tabla de los tres bucles más abajo.
 
 La fase semántica está separada del parser (`analizador_semantico.py`), construye
-una tabla de símbolos con tipos, ámbitos y estado de inicialización, reporta cada
-error con **fila, columna, lexema y mensaje**, y continúa el análisis tras cada
-error (recuperación). Está integrada en la pestaña **«Análisis Semántico»** de la
-interfaz web, con la sugerencia opcional de IA (Modalidad A del bonus).
+una tabla de símbolos con tipos, ámbitos, estado de inicialización y el atributo
+heredado `escribible`, reporta cada error con **fila, columna, lexema y mensaje**,
+y continúa el análisis tras cada error (recuperación). Está integrada en la
+pestaña **«Análisis Semántico»** de la interfaz web, con la sugerencia opcional de
+IA (Modalidad A del bonus).
 
 ```bash
-python test_semantico.py                    # 4 pruebas automáticas
+python test_semantico.py                    # 7 pruebas automáticas
 python generar_documento_semantico.py       # regenera el PDF entregable
 ```
+
+#### Los tres bucles y por qué son tres
+
+Gleam no tiene `while`, `for`, `break` ni `continue`: solo `case` y recursión.
+Paisascript ofrece los tres patrones clásicos de repetición y cada uno se apoya en
+una construcción distinta del lenguaje destino.
+
+| Bucle | Clase | Traducción a Gleam | Reglas que lo validan |
+| :--- | :--- | :--- | :--- |
+| `mientras_que c dele_pues B hasta_ahi` | Condición al principio (*pre-test*); puede ejecutar cero veces | Función auxiliar recursiva de cola con el estado del bucle como parámetros | SEM-4, **SEM-6** |
+| `pa_cada i desde a hasta b [de_a p] dele_pues B listo_pues` | Contador con límites y paso | `list.range(a, b) |> list.each(fn(i) { B })`; con paso ≠ 1, recursión de cola | SEM-3, **SEM-7**, **SEM-8** |
+| `repita_pues B hasta_que c` | Condición al final (*post-test*); ejecuta al menos una vez | La misma recursión de cola, con el cuerpo emitido **antes** del `case` | SEM-4, **SEM-6** |
+
+En `repita_pues`, `hasta_que` es la condición de **salida**, no de permanencia, y
+se evalúa dentro del ámbito del cuerpo, así que puede leer las variables que el
+cuerpo acaba de crear.
 
 ### Capacidades mínimas del §2 del enunciado
 

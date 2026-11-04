@@ -1,0 +1,37 @@
+// ============================================================================
+//  Demostracion de las reglas semanticas de bucle (SEM-6, SEM-7 y SEM-8)
+//  Cada bucle de abajo viola UNA regla. El analizador reporta las seis
+//  violaciones en una sola pasada, con fila, columna, lexema y mensaje.
+// ============================================================================
+
+// --- SEM-6: el cuerpo no redefine 'tope', la condicion nunca cambia --------
+pille_pues numerito tope = 10
+mientras_que tope > 0 dele_pues
+    hable_pues("doy vueltas sin avanzar")
+hasta_ahi
+
+// --- SEM-6: condicion constante -------------------------------------------
+mientras_que sizas dele_pues
+    hable_pues("esto no para")
+hasta_ahi
+
+// --- SEM-6: en repita_pues, hasta_que es la condicion de SALIDA -----------
+pille_pues numerito veces = 0
+repita_pues
+    hable_pues("tampoco avanzo")
+hasta_que veces > 5
+
+// --- SEM-7: 'm' es la variable de control, es de solo lectura -------------
+pa_cada m desde 1 hasta 3 dele_pues
+    pille_pues m = 99
+listo_pues
+
+// --- SEM-8: paso 0, la variable de control nunca avanza -------------------
+pa_cada i desde 1 hasta 10 de_a 0 dele_pues
+    hable_pues(i)
+listo_pues
+
+// --- SEM-8: paso positivo pero desde > hasta, el cuerpo nunca se ejecuta --
+pa_cada j desde 10 hasta 1 dele_pues
+    hable_pues(j)
+listo_pues

@@ -33,7 +33,7 @@ PDF_SALIDA = RAIZ / "gramatica_ampliada_semantica.pdf"
 
 
 # =============================================================================
-#  LAS CINCO REGLAS SEMÁNTICAS (contenido en ámbar)
+#  LAS OCHO REGLAS SEMÁNTICAS (contenido en ámbar)
 # =============================================================================
 
 REGLAS_SEMANTICAS = [
@@ -130,7 +130,8 @@ REGLAS_SEMANTICAS = [
         "ancla": "sent_mientras",
         "id": "SEM-4",
         "titulo": "Condición de control de tipo booleano",
-        "nodos": "&lt;sent_si&gt;, &lt;sent_mientras&gt;",
+        "nodos": ("&lt;sent_si&gt;, &lt;sent_mientras&gt;, "
+                  "&lt;sent_repita&gt;"),
         "filas": [
             ("Atributos involucrados",
              "<b>type(cond)</b>: <i>sintetizado</i> en la expresión de control. "
@@ -138,9 +139,12 @@ REGLAS_SEMANTICAS = [
              "<b>cond_esperado</b>: <i>heredado</i> desde la construcción. "
              "Dominio: {siono}."),
             ("Restricción",
-             "<b>type(cond) = siono</b> tanto en <b>si_acaso</b> como en "
-             "<b>mientras_que</b>. Una condición numerito, cuento o quebradito "
-             "no es válida."),
+             "<b>type(cond) = siono</b> en <b>si_acaso</b>, en "
+             "<b>mientras_que</b> y en el <b>hasta_que</b> de "
+             "<b>repita_pues</b>. Una condición numerito, cuento o quebradito "
+             "no es válida.<br>"
+             "En <b>repita_pues</b> la condición se evalúa en el ámbito del "
+             "cuerpo, así que puede leer las variables que el cuerpo creó."),
             ("Acciones del compilador",
              "1. Evaluar el tipo sintetizado de la condición.<br>"
              "2. Compararlo con siono.<br>"
@@ -173,6 +177,137 @@ REGLAS_SEMANTICAS = [
              "4. Comparar cada argumento con su parámetro formal y reportar los "
              "desajustes de tipo.<br>"
              "5. Sintetizar return_type y continuar."),
+        ],
+    },
+    {
+        "ancla": "sent_repita",
+        "id": "SEM-6",
+        "titulo": "Terminación del bucle: la condición tiene que poder cambiar",
+        "nodos": "&lt;sent_mientras&gt;, &lt;sent_repita&gt;",
+        "filas": [
+            ("Atributos involucrados",
+             "<b>leidas(cond)</b>: <i>sintetizado</i> en la expresión de "
+             "control. Dominio: conjunto de identificadores que la condición "
+             "consulta (sin los nombres de función).<br>"
+             "<b>redefinidas(cuerpo)</b>: <i>sintetizado</i> en &lt;bloque&gt;. "
+             "Dominio: conjunto de identificadores que el cuerpo vuelve a "
+             "enlazar con <tt>pille_pues</tt> o <tt>escuche_pues</tt>.<br>"
+             "<b>valor(cond)</b>: <i>sintetizado</i> por plegado de "
+             "constantes. Dominio: {sizas, naranjas} ∪ {⊥} (⊥ = no constante).<br>"
+             "<b>continua_si</b>: <i>heredado</i> de la construcción. Dominio: "
+             "{verdadero} para <tt>mientras_que</tt>, {falso} para "
+             "<tt>repita_pues</tt>, porque <tt>hasta_que</tt> es la condición "
+             "de SALIDA, no de permanencia."),
+            ("Restricción",
+             "<b>valor(cond) ≠ continua_si</b>: la condición no puede ser el "
+             "literal que mantiene el bucle vivo (<tt>mientras_que sizas</tt> "
+             "o <tt>hasta_que naranjas</tt>).<br>"
+             "<b>leidas(cond) ≠ ∅</b>: una condición sin variables tiene "
+             "siempre el mismo valor.<br>"
+             "<b>leidas(cond) ∩ redefinidas(cuerpo) ≠ ∅</b>: el cuerpo debe "
+             "redefinir al menos una de las variables que la condición lee.<br>"
+             "La regla es <i>conservadora y sólida en este lenguaje</i>: "
+             "Paisascript es inmutable y sin efectos laterales, así que si esa "
+             "intersección es vacía ninguna ejecución puede cambiar el valor "
+             "de la condición."),
+            ("Acciones del compilador",
+             "1. Plegar la condición: si es un literal booleano, compararlo "
+             "con continua_si y reportar «el bucle nunca termina».<br>"
+             "2. Recorrer la condición y recolectar leidas(cond), descartando "
+             "los identificadores que la tabla de símbolos marca como "
+             "función.<br>"
+             "3. Recorrer el cuerpo (incluidos los bucles anidados) y "
+             "recolectar redefinidas(cuerpo) a partir de los nodos "
+             "&lt;sent_declaracion&gt;, &lt;sent_lectura&gt; y "
+             "&lt;sent_asignacion&gt;.<br>"
+             "4. Intersecar ambos conjuntos. Si el resultado es vacío, "
+             "reportar error con fila, columna y lexema del bucle, nombrando "
+             "las variables de la condición que habría que hacer avanzar.<br>"
+             "5. Continuar el análisis del resto del programa.<br>"
+             "<i>Por qué importa para Gleam:</i> ese bucle se traduce a una "
+             "recursión de cola; sin progreso, la función auxiliar nunca "
+             "alcanza su caso base."),
+        ],
+    },
+    {
+        "ancla": "sent_para",
+        "id": "SEM-7",
+        "titulo": "La variable de control del pa_cada es de solo lectura",
+        "nodos": ("&lt;sent_para&gt;, y dentro de su &lt;bloque&gt;: "
+                  "&lt;sent_declaracion&gt;, &lt;sent_lectura&gt;, "
+                  "&lt;sent_asignacion&gt;"),
+        "filas": [
+            ("Atributos involucrados",
+             "<b>var_control.lexema</b>: <i>heredado</i> del IDENTIFICADOR que "
+             "sigue a <tt>pa_cada</tt>.<br>"
+             "<b>var_control.escribible</b>: <i>heredado</i> hacia el ámbito "
+             "del bucle. Dominio: {verdadero, falso}; vale <b>falso</b> para "
+             "la variable de control y verdadero para cualquier otra.<br>"
+             "<b>var_control.categoria</b>: <i>sintetizado</i> al declararla. "
+             "Dominio: {bucle}.<br>"
+             "<b>var_control.type</b>: <i>sintetizado</i> = numerito."),
+            ("Restricción",
+             "Ninguna sentencia del cuerpo puede volver a enlazar la variable "
+             "de control: ni <tt>pille_pues i = …</tt>, ni "
+             "<tt>escuche_pues(i)</tt>, ni <tt>i = …</tt>.<br>"
+             "El atributo se consulta antes de cada redefinición: solo se "
+             "admite si <b>escribible = verdadero</b>.<br>"
+             "Fuera del bucle el nombre vuelve a estar libre, porque el ámbito "
+             "del <tt>pa_cada</tt> se cierra al terminar."),
+            ("Acciones del compilador",
+             "1. Al entrar al <tt>pa_cada</tt>, abrir un ámbito nuevo e "
+             "insertar la variable de control con categoría = bucle, tipo = "
+             "numerito, inicializada = verdadero y <b>escribible = falso</b>.<br>"
+             "2. En cada <tt>pille_pues</tt> y cada <tt>escuche_pues</tt> del "
+             "cuerpo, buscar el nombre en la pila de ámbitos y leer su "
+             "atributo escribible.<br>"
+             "3. Si es falso, reportar error con fila, columna y lexema, y "
+             "sugerir otro nombre para la variable nueva.<br>"
+             "4. Cerrar el ámbito al salir del bucle y continuar.<br>"
+             "<i>Por qué importa para Gleam:</i> la variable de control se "
+             "vuelve el parámetro de <tt>fn(i) { … }</tt> dentro de "
+             "<tt>list.each</tt>; reenlazarla rompería el recorrido."),
+        ],
+    },
+    {
+        "ancla": "paso_opcional",
+        "id": "SEM-8",
+        "titulo": "Paso del pa_cada distinto de cero y recorrido alcanzable",
+        "nodos": "&lt;sent_para&gt;, &lt;paso_opcional&gt;",
+        "filas": [
+            ("Atributos involucrados",
+             "<b>valor(desde)</b>, <b>valor(hasta)</b>, <b>valor(paso)</b>: "
+             "<i>sintetizados</i> por plegado de constantes sobre cada "
+             "&lt;expresion&gt;. Dominio: ℤ ∪ {⊥}, donde ⊥ significa «no es un "
+             "literal» (admite el menos unario y los paréntesis).<br>"
+             "<b>paso_implicito</b>: <i>heredado</i>; vale 1 cuando "
+             "&lt;paso_opcional&gt; deriva en ε.<br>"
+             "<b>direccion</b>: <i>sintetizado</i> en &lt;sent_para&gt; = "
+             "signo(valor(paso)). Dominio: {+1, −1}."),
+            ("Restricción",
+             "<b>valor(paso) ≠ 0</b>: con paso 0 la variable de control nunca "
+             "avanza.<br>"
+             "Si <b>valor(paso) &gt; 0</b> entonces <b>valor(desde) ≤ "
+             "valor(hasta)</b>.<br>"
+             "Si <b>valor(paso) &lt; 0</b> entonces <b>valor(desde) ≥ "
+             "valor(hasta)</b>.<br>"
+             "Las dos últimas solo se exigen cuando los tres valores son "
+             "literales: con límites variables el recorrido no es decidible en "
+             "tiempo de compilación y la regla calla en lugar de dar un falso "
+             "positivo."),
+            ("Acciones del compilador",
+             "1. Plegar las tres expresiones a su valor constante; si "
+             "&lt;paso_opcional&gt; es ε, usar paso_implicito = 1.<br>"
+             "2. Si valor(paso) = 0, reportar error sobre el lexema del paso "
+             "con fila y columna.<br>"
+             "3. Si los tres son literales, comparar el signo del paso con el "
+             "orden de los límites y reportar «el cuerpo nunca se ejecuta» "
+             "indicando los tres valores concretos.<br>"
+             "4. Si alguno no es literal, no reportar nada y seguir.<br>"
+             "5. Continuar con el cuerpo del bucle.<br>"
+             "<i>Por qué importa para Gleam:</i> <tt>list.range</tt> no admite "
+             "paso, así que con paso ≠ 1 el generador emite recursión de cola; "
+             "un paso 0 produciría una recursión infinita."),
         ],
     },
 ]
@@ -238,6 +373,9 @@ def render_gramatica():
 
 CSS = """
 @page { size: A4; margin: 1.8cm 1.9cm 1.8cm 1.9cm; }
+/* Chromium descarta los fondos al imprimir si no se le pide lo contrario, y el
+   fondo ambar de las reglas semanticas es parte de la convencion del enunciado. */
+* { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body { font-family: "DejaVu Serif", Georgia, serif; font-size: 10pt;
        color: #111111; line-height: 1.34; }
 h1 { font-size: 19pt; margin: 0 0 6px 0; color: #7A3E00; }
@@ -311,7 +449,7 @@ def construir_html():
         <td>Operandos compatibles: mismo tipo aritmético; lógicos y condiciones siono.</td>
       </tr>
       <tr>
-        <td>SEM-4</td><td>&lt;sent_si&gt;, &lt;sent_mientras&gt;</td>
+        <td>SEM-4</td><td>&lt;sent_si&gt;, &lt;sent_mientras&gt;, &lt;sent_repita&gt;</td>
         <td>type(cond) (sintetizado), cond_esperado (heredado)</td>
         <td>La condición de control es de tipo siono.</td>
       </tr>
@@ -319,6 +457,21 @@ def construir_html():
         <td>SEM-5</td><td>&lt;sent_llamada&gt;, &lt;sufijo_id&gt;</td>
         <td>arity, arg_type[], param_type[], return_type</td>
         <td>La función existe, la aridad coincide y cada argumento tiene el tipo del parámetro.</td>
+      </tr>
+      <tr>
+        <td>SEM-6</td><td>&lt;sent_mientras&gt;, &lt;sent_repita&gt;</td>
+        <td>leidas(cond), redefinidas(cuerpo), valor(cond) (sintetizados); continua_si (heredado)</td>
+        <td>El cuerpo redefine alguna variable de la condición: el bucle puede terminar.</td>
+      </tr>
+      <tr>
+        <td>SEM-7</td><td>&lt;sent_para&gt; y su &lt;bloque&gt;</td>
+        <td>var_control.escribible (heredado), categoria y type (sintetizados)</td>
+        <td>La variable de control no se puede reenlazar dentro del bucle.</td>
+      </tr>
+      <tr>
+        <td>SEM-8</td><td>&lt;sent_para&gt;, &lt;paso_opcional&gt;</td>
+        <td>valor(desde), valor(hasta), valor(paso), direccion (sintetizados); paso_implicito (heredado)</td>
+        <td>El paso no es 0 y su signo concuerda con los límites: el recorrido existe.</td>
       </tr>
     </table>
     """
@@ -371,8 +524,55 @@ elementos representan. El compilador las valida en una fase independiente
 (<i>analizador_semantico.py</i>) que recorre el árbol de sintaxis y construye una
 tabla de símbolos.</p>
 
-<h2>1.1 Resumen de las cinco reglas</h2>
+<h2>1.1 Resumen de las ocho reglas</h2>
 {resumen}
+
+<h2>1.2 Los tres bucles de Paisascript y las reglas que los gobiernan</h2>
+
+<p>Gleam <b>no tiene bucles</b>: no hay <tt>while</tt>, <tt>for</tt>,
+<tt>break</tt> ni <tt>continue</tt>; solo <tt>case</tt> y recursión. Paisascript
+sí los ofrece, porque son requisito del curso y porque su traducción es mecánica.
+Las tres formas cubren los tres patrones clásicos de repetición y cada una se
+apoya en una construcción distinta de Gleam:</p>
+
+<table class="resumen">
+  <tr>
+    <th width="27%">Bucle en Paisascript</th><th width="15%">Clase</th>
+    <th width="33%">Traducción a Gleam</th><th width="25%">Reglas que lo validan</th>
+  </tr>
+  <tr>
+    <td><tt>mientras_que c dele_pues B hasta_ahi</tt></td>
+    <td>Condición al principio (<i>pre-test</i>); puede ejecutar cero veces.</td>
+    <td>Función auxiliar <b>recursiva de cola</b> cuyos parámetros son las
+        variables que el cuerpo redefine; <tt>case c {{ True -&gt; bucle(estado'),
+        False -&gt; estado }}</tt>.</td>
+    <td>SEM-4 (condición siono) y <b>SEM-6</b> (progreso).</td>
+  </tr>
+  <tr>
+    <td><tt>pa_cada i desde a hasta b [de_a p] dele_pues B listo_pues</tt></td>
+    <td>Contador con límites y paso; recorrido conocido de antemano.</td>
+    <td>Con paso 1: <tt>list.range(a, b) |&gt; list.each(fn(i) {{ B }})</tt>.
+        Con paso ≠ 1: recursión de cola con incremento, porque
+        <tt>list.range</tt> no admite paso.</td>
+    <td>SEM-3 (límites numerito), <b>SEM-7</b> (variable de control de solo
+        lectura) y <b>SEM-8</b> (paso y dirección).</td>
+  </tr>
+  <tr>
+    <td><tt>repita_pues B hasta_que c</tt></td>
+    <td>Condición al final (<i>post-test</i>); ejecuta al menos una vez.</td>
+    <td>La misma recursión de cola, con el cuerpo emitido <b>antes</b> del
+        <tt>case</tt>: <tt>True -&gt; estado</tt> (caso base),
+        <tt>False -&gt; bucle(estado')</tt>.</td>
+    <td>SEM-4 (condición siono) y <b>SEM-6</b> (progreso, con
+        <tt>continua_si = falso</tt>).</td>
+  </tr>
+</table>
+
+<p>Que los tres bucles se traduzcan a recursión es exactamente lo que vuelve
+necesarias a SEM-6, SEM-7 y SEM-8: en un lenguaje con <tt>while</tt> de verdad un
+bucle sin progreso solo se cuelga en ejecución, mientras que aquí genera una
+función recursiva que nunca alcanza su caso base. El análisis semántico detecta en
+tiempo de compilación lo que el lenguaje destino no podría ni expresar.</p>
 
 <!-- ============================ PRODUCCIONES ============================ -->
 <h1>2. Producciones BNF con las reglas semánticas intercaladas</h1>
@@ -399,12 +599,15 @@ tabla = analizador.tabla                   # tabla de símbolos</div>
 
 <h2>3.1 Tabla de símbolos</h2>
 <p>Estructura de datos con <b>pila de ámbitos</b> (uno por bloque, función,
-<tt>pa_cada</tt> y <tt>pillemos</tt>). Cada entrada almacena:</p>
+<tt>mientras_que</tt>, <tt>pa_cada</tt>, <tt>repita_pues</tt> y
+<tt>pillemos</tt>). Cada entrada almacena:</p>
 <ul>
   <li><b>lexema</b>, <b>tipo</b> (numerito, quebradito, cuento, siono o desconocido),</li>
   <li><b>categoría</b> (variable, parámetro, función, variable de bucle o patrón),</li>
   <li><b>ámbito</b> y <b>nivel</b> de anidamiento,</li>
   <li><b>estado de inicialización</b>,</li>
+  <li><b>escribible</b> (falso solo para la variable de control de un
+      <tt>pa_cada</tt>; es el atributo heredado que usa SEM-7),</li>
   <li><b>fila</b> y <b>columna</b> de la declaración,</li>
   <li>para funciones: <b>parámetros</b> (nombre y tipo) y <b>tipo de retorno</b>.</li>
 </ul>
@@ -414,7 +617,7 @@ modificarla.</p>
 
 <h2>3.2 Detección y reporte de errores</h2>
 <p>Cada violación produce un objeto <tt>ErrorSemantico</tt> con <b>fila</b>,
-<b>columna</b>, <b>lexema</b>, la regla violada (SEM-1 … SEM-5) y un mensaje
+<b>columna</b>, <b>lexema</b>, la regla violada (SEM-1 … SEM-8) y un mensaje
 descriptivo. Ejemplo real de salida:</p>
 
 <div class="codigo">Error Semántico en [Fila 16, Columna 21] sobre 'edad':
@@ -444,7 +647,7 @@ una sola pasada (verificado en <i>test_semantico.py</i>).</p>
   <tr><td class="corto">Léxica</td><td class="corto">lexer.py</td><td>Tokens con lexema, fila y columna.</td></tr>
   <tr><td class="corto">Sintáctica</td><td class="corto">parser.py</td><td>CST según la gramática BNF (LL(1) recursivo).</td></tr>
   <tr><td class="corto"><b>Semántica</b></td><td class="corto"><b>analizador_semantico.py</b></td>
-      <td>Visitor sobre el CST, tabla de símbolos y reglas SEM-1 … SEM-5.</td></tr>
+      <td>Visitor sobre el CST, tabla de símbolos y reglas SEM-1 … SEM-8.</td></tr>
 </table>
 
 <!-- ============================ BONUS ============================ -->
@@ -459,7 +662,7 @@ lenguaje natural.</p>
 
 <p><b>Flujo de integración:</b></p>
 <ol>
-  <li>El compilador ejecuta las reglas clásicas (SEM-1 … SEM-5).</li>
+  <li>El compilador ejecuta las reglas clásicas (SEM-1 … SEM-8).</li>
   <li>Si hay errores, la interfaz ofrece el botón
       «Explicar y corregir estos errores semánticos con IA».</li>
   <li><tt>ai_assistant.analizar_error_semantico_con_ia(codigo, errores, tabla)</tt>
@@ -507,10 +710,19 @@ declara e inicializa el identificador.</p>
 #  CONVERSIÓN A PDF
 # =============================================================================
 
-def convertir_a_pdf():
+# Navegadores basados en Chromium que saben imprimir a PDF desde la linea de
+# comandos. Se usan como respaldo cuando LibreOffice no esta disponible.
+NAVEGADORES = [
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+]
+
+
+def _pdf_con_libreoffice():
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if soffice is None:
-        print("AVISO: no se encontró LibreOffice; se generó solo el HTML.")
         return None
     subprocess.run(
         [soffice, "--headless", "--convert-to", "pdf",
@@ -518,6 +730,39 @@ def convertir_a_pdf():
         check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     return PDF_SALIDA if PDF_SALIDA.exists() else None
+
+
+def _pdf_con_navegador():
+    """Imprime el HTML con Edge o Chrome en modo headless."""
+    navegador = next(
+        (ruta for ruta in NAVEGADORES if Path(ruta).exists()),
+        shutil.which("msedge") or shutil.which("chrome"),
+    )
+    if navegador is None:
+        return None
+    subprocess.run(
+        [str(navegador), "--headless", "--disable-gpu", "--no-pdf-header-footer",
+         f"--print-to-pdf={PDF_SALIDA}", HTML_SALIDA.as_uri()],
+        check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180,
+    )
+    return PDF_SALIDA if PDF_SALIDA.exists() else None
+
+
+def convertir_a_pdf():
+    """Intenta LibreOffice y, si no esta, Edge/Chrome headless."""
+    for motor, nombre in ((_pdf_con_libreoffice, "LibreOffice"),
+                          (_pdf_con_navegador, "Edge/Chrome headless")):
+        try:
+            pdf = motor()
+        except Exception as e:                      # noqa: BLE001
+            print(f"AVISO: {nombre} falló ({e}).")
+            continue
+        if pdf is not None:
+            print(f"Motor de PDF: {nombre}")
+            return pdf
+    print("AVISO: no se encontró LibreOffice ni un navegador Chromium; "
+          "se generó solo el HTML.")
+    return None
 
 
 def main():

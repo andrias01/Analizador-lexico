@@ -1099,9 +1099,9 @@ with pestañas[5]:
         use_container_width=True, hide_index=True, height=460,
     )
 
-# --- Pestaña: Análisis Semántico (SEM-1 .. SEM-5) ---------------------------
+# --- Pestaña: Análisis Semántico (SEM-1 .. SEM-8) ---------------------------
 with pestañas[6]:
-    st.subheader("Análisis Semántico — Reglas SEM-1 a SEM-5")
+    st.subheader("Análisis Semántico — Reglas SEM-1 a SEM-8")
     st.caption(
         "Fase independiente del parser: un visitor recorre el CST, construye la "
         "tabla de símbolos y valida las reglas semánticas. Tras cada error el "
@@ -1118,7 +1118,7 @@ with pestañas[6]:
     if filas_sem:
         df_sem = pd.DataFrame(filas_sem)[
             ["Nivel", "Ámbito", "Lexema", "Tipo", "Categoría", "Fila", "Columna",
-             "Inicializada", "Detalle"]
+             "Inicializada", "Escribible", "Detalle"]
         ]
         st.dataframe(df_sem, use_container_width=True, hide_index=True, height=320)
     else:
@@ -1126,7 +1126,7 @@ with pestañas[6]:
 
     st.markdown("#### Errores semánticos detectados")
     if not errores_sem:
-        st.success("Sin errores semánticos: se cumplen las 5 reglas (SEM-1 a SEM-5).")
+        st.success("Sin errores semánticos: se cumplen las 8 reglas (SEM-1 a SEM-8).")
     else:
         st.dataframe(
             pd.DataFrame([
@@ -1165,10 +1165,20 @@ with pestañas[6]:
             "- **SEM-3 · Operandos**: los operadores aritméticos exigen el mismo "
             "tipo (`numerito` o `quebradito`), `%` exige `numerito`, y los lógicos "
             "exigen `siono`.\n"
-            "- **SEM-4 · Condiciones**: la condición de `si_acaso` y `mientras_que` "
-            "debe ser `siono`.\n"
+            "- **SEM-4 · Condiciones**: la condición de `si_acaso`, `mientras_que` "
+            "y el `hasta_que` de `repita_pues` debe ser `siono`.\n"
             "- **SEM-5 · Llamadas**: la función debe existir, la aridad debe "
-            "coincidir y cada argumento debe tener el tipo del parámetro formal."
+            "coincidir y cada argumento debe tener el tipo del parámetro formal.\n"
+            "- **SEM-6 · Terminación del bucle**: en `mientras_que` y "
+            "`repita_pues`, el cuerpo debe redefinir alguna variable que la "
+            "condición lee; si no, el bucle no puede terminar. También rechaza "
+            "las condiciones constantes (`mientras_que sizas`).\n"
+            "- **SEM-7 · Variable de control**: la variable de un `pa_cada` es "
+            "de solo lectura dentro del bucle (atributo heredado `escribible`), "
+            "porque en Gleam se vuelve el parámetro de `fn(i) {...}`.\n"
+            "- **SEM-8 · Paso y recorrido**: el paso `de_a` no puede ser 0 y su "
+            "signo debe concordar con los límites `desde`/`hasta`, de modo que "
+            "el cuerpo pueda ejecutarse al menos una vez."
         )
 
 # --- 4. Errores y Asistente IA ----------------------------------------------

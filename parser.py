@@ -50,11 +50,11 @@ class ErroresSintacticos(ErrorSintactico):
 # Tokens que pueden iniciar una sentencia
 INICIO_SENT_LEX = {
     "pille_pues", "escuche_pues", "hable_pues", "si_acaso",
-    "mientras_que", "pa_cada", "pillemos", "entregue_pues",
+    "mientras_que", "pa_cada", "repita_pues", "pillemos", "entregue_pues",
 }
 INICIO_SENT_TIPO = {
     "KW_DECLARACION", "KW_LECTURA", "KW_IMPRESION", "KW_SI",
-    "KW_MIENTRAS", "KW_PARA", "KW_PILLEMOS", "KW_RETORNAR",
+    "KW_MIENTRAS", "KW_PARA", "KW_REPITA", "KW_PILLEMOS", "KW_RETORNAR",
     "IDENTIFICADOR",
 }
 
@@ -62,12 +62,12 @@ INICIO_SENT_TIPO = {
 # de una función (las funciones solo existen a nivel global, así que si aparece
 # una dentro de un bloque es porque faltó cerrar algo).
 FRONTERA_LEX = {
-    "ya_quedo", "asi_quedo", "hasta_ahi", "listo_pues", "sino_pues", "}",
-    "hagale_pues",
+    "ya_quedo", "asi_quedo", "hasta_ahi", "listo_pues", "hasta_que",
+    "sino_pues", "}", "hagale_pues",
 }
 FRONTERA_TIPO = {
     "KW_FIN_FUNCION", "KW_FIN_SI", "KW_SINO", "KW_FIN_MIENTRAS",
-    "KW_FIN_PARA", "LLAVE_CIERRA", "KW_FUNCION",
+    "KW_FIN_PARA", "KW_HASTA_QUE", "LLAVE_CIERRA", "KW_FUNCION",
 }
 
 
@@ -454,7 +454,7 @@ class Parser:
     # 3.3 BLOQUES Y SENTENCIAS
     # ==========================================
 
-    def parse_bloque(self, tokens_cierre=("ya_quedo", "asi_quedo", "hasta_ahi", "listo_pues", "}")):
+    def parse_bloque(self, tokens_cierre=("ya_quedo", "asi_quedo", "hasta_ahi", "listo_pues", "hasta_que", "}")):
         nodo_sent = self._sentencia_segura(tokens_cierre)
         nodo_ls = self.parse_lista_sentencias(tokens_cierre)
         return {"tipo": "<bloque>", "es_terminal": False, "hijos": [nodo_sent, nodo_ls]}
@@ -489,6 +489,8 @@ class Parser:
             nodo_sub = self.parse_sent_mientras()
         elif tipo == "KW_PARA" or lexema == "pa_cada":
             nodo_sub = self.parse_sent_para()
+        elif tipo == "KW_REPITA" or lexema == "repita_pues":
+            nodo_sub = self.parse_sent_repita()
         elif tipo == "KW_PILLEMOS" or lexema == "pillemos":
             nodo_sub = self.parse_sent_pillemos()
         elif tipo == "KW_RETORNAR" or lexema == "entregue_pues":
@@ -594,6 +596,19 @@ class Parser:
             nodo_expr = self.parse_expresion()
             return {"tipo": "<paso_opcional>", "es_terminal": False, "hijos": [tok_da, nodo_expr]}
         return {"tipo": "<paso_opcional>", "es_terminal": False, "hijos": [self._nodo_eps()]}
+
+    def parse_sent_repita(self):
+        """<sent_repita> ::= repita_pues <bloque> hasta_que <expresion>
+
+        Bucle de condicion al final (post-test): el cuerpo se ejecuta al menos
+        una vez y `hasta_que` indica la condicion de SALIDA. En Gleam se traduce
+        a recursion de cola con el cuerpo antes del `case`.
+        """
+        tok_rp = self.match("KW_REPITA", "repita_pues")
+        nodo_blq = self.parse_bloque(("hasta_que", "KW_HASTA_QUE"))
+        tok_hq = self.match("KW_HASTA_QUE", "hasta_que")
+        nodo_expr = self.parse_expresion()
+        return {"tipo": "<sent_repita>", "es_terminal": False, "hijos": [tok_rp, nodo_blq, tok_hq, nodo_expr]}
 
     def parse_sent_pillemos(self):
         tok_p = self.match("KW_PILLEMOS", "pillemos")

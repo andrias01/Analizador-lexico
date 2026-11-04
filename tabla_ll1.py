@@ -36,6 +36,7 @@ GRAMATICA_BNF = {
         ["<sent_si>"],
         ["<sent_mientras>"],
         ["<sent_para>"],
+        ["<sent_repita>"],
         ["<sent_pillemos>"],
         ["<sent_retornar>"],
         ["<sent_llamada>"]
@@ -61,6 +62,9 @@ GRAMATICA_BNF = {
     # Repetición con variable de control (for)
     "<sent_para>": [["KW_PARA", "IDENTIFICADOR", "KW_DESDE", "<expresion>", "KW_HASTA", "<expresion>", "<paso_opcional>", "KW_HACER", "<bloque>", "KW_FIN_PARA"]],
     "<paso_opcional>": [["KW_PASO", "<expresion>"], []],
+    # Bucle de condicion al final (post-test). El cuerpo se ejecuta al menos
+    # una vez; `hasta_que` cierra el bloque y da la condicion de SALIDA.
+    "<sent_repita>": [["KW_REPITA", "<bloque>", "KW_HASTA_QUE", "<expresion>"]],
     
     # Calce de patrones (case)
     "<sent_pillemos>": [["KW_PILLEMOS", "<expresion>", "LLAVE_ABRE", "<lista_casos>", "LLAVE_CIERRA"]],

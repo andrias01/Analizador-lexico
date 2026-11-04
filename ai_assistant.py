@@ -198,7 +198,7 @@ def analizar_error_con_ia(codigo_fuente, error_detectado, api_key=None):
 #  BONUS QUIZ 4 — MODALIDAD A: IA COMO CAPA ADICIONAL DE VALIDACIÓN SEMÁNTICA
 # =============================================================================
 #
-# Los errores que detectan las reglas semánticas clásicas (SEM-1 a SEM-5,
+# Los errores que detectan las reglas semánticas clásicas (SEM-1 a SEM-8,
 # implementadas en analizador_semantico.py) se envían a un modelo de lenguaje
 # junto con el código fuente y la tabla de símbolos. El modelo NO reemplaza
 # las reglas: solo enriquece el diagnóstico con una explicación en lenguaje
@@ -233,7 +233,7 @@ def analizar_error_semantico_con_ia(codigo_fuente, errores_semanticos,
     Modalidad A del bonus: capa adicional de validación semántica con IA.
 
     Recibe el código fuente, los errores semánticos detectados por las reglas
-    clásicas (SEM-1 .. SEM-5) y la tabla de símbolos construida por
+    clásicas (SEM-1 .. SEM-8) y la tabla de símbolos construida por
     `analizador_semantico.AnalizadorSemantico`. Devuelve una explicación y una
     sugerencia de corrección en lenguaje natural.
 

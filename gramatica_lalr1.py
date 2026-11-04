@@ -43,6 +43,7 @@ GRAMATICA_LALR1 = {
         ["<sent_si>", "<sentencia_resto>"],
         ["<sent_mientras>", "<sentencia_resto>"],
         ["<sent_para>", "<sentencia_resto>"],
+        ["<sent_repita>", "<sentencia_resto>"],
         ["<sent_pillemos>", "<sentencia_resto>"],
         ["<sent_retornar>", "<sentencia_resto>"],
         ["<sent_llamada>", "<sentencia_resto>"],
@@ -69,6 +70,7 @@ GRAMATICA_LALR1 = {
     # Repetición con variable de control (for) (mantenido)
     "<sent_para>": [["KW_PARA", "IDENTIFICADOR", "KW_DESDE", "<expresion>", "KW_HASTA", "<expresion>", "<paso_opcional>", "KW_HACER", "<bloque>", "KW_FIN_PARA"]],
     "<paso_opcional>": [["KW_PASO", "<expresion>"], []],
+    "<sent_repita>": [["KW_REPITA", "<bloque>", "KW_HASTA_QUE", "<expresion>"]],
     
     # Calce de patrones (case) (mantenido)
     "<sent_pillemos>": [["KW_PILLEMOS", "<expresion>", "LLAVE_ABRE", "<lista_casos>", "LLAVE_CIERRA"]],

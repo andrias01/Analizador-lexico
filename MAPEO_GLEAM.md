@@ -19,7 +19,7 @@ todas las decisiones de Paisascript:
 | Propiedad de Gleam | Consecuencia en el diseño de Paisascript |
 | :--- | :--- |
 | No hay mutación. `let` crea un enlace nuevo, nunca reasigna. | Paisascript **no tiene asignación sin `pille_pues`**. Toda "reasignación" es shadowing. |
-| No hay `if`, `while`, `for`, `break`, `continue` ni `return`. Solo `case` y recursión. | Los cuatro constructos que el §2 exige se traducen a `case` y a recursión de cola. |
+| No hay `if`, `while`, `for`, `break`, `continue` ni `return`. Solo `case` y recursión. | Los condicionales y los **tres** bucles (`mientras_que`, `pa_cada`, `repita_pues`) se traducen a `case` y a recursión de cola. |
 | `Int` y `Float` son tipos disjuntos, con operadores distintos (`+` vs `+.`). | El lexer emite **`NUM_ENTERO` y `NUM_REAL` como tokens separados**. |
 | Todo es expresión; una función devuelve su última expresión. | `entregue_pues` en cola es trivial; anticipado exige reestructurar el flujo. |
 
@@ -215,7 +215,49 @@ fn bucle_2(k: Int) -> Nil {
 }
 ```
 
-### 3.4 `entregue_pues` anticipado
+### 3.4 `repita_pues` → recursión de cola con el cuerpo primero
+
+Es el tercer bucle, y el más fácil de generar una vez resuelto
+`mientras_que`: la única diferencia es **dónde se emite el cuerpo**. En un
+`while` el cuerpo va dentro de la rama `True` del `case`; en un
+`repita_pues` va **antes** del `case`. Eso es, literalmente, la semántica
+post-test: el cuerpo corre al menos una vez.
+
+La otra diferencia es el sentido de la condición. `hasta_que` es la condición
+de **salida**, no de permanencia, así que en el `case` generado las ramas se
+invierten: `True` devuelve el estado (caso base) y `False` vuelve a llamar.
+
+**Paisascript**
+```
+pille_pues numerito intentos = 0
+repita_pues
+    escuche_pues(clave)
+    pille_pues intentos = intentos + 1
+    hable_pues("Intento numero " <> intentos)
+hasta_que clave igualito "abreme" o_que intentos >= 3
+```
+
+**Gleam** — el estado del bucle es `(clave, intentos)`:
+```gleam
+fn bucle_3(clave: String, intentos: Int) -> #(String, Int) {
+  // el cuerpo va ANTES del case: por eso corre al menos una vez
+  let assert Ok(clave) = erlang.get_line("")
+  let intentos = intentos + 1
+  io.println("Intento numero " <> int.to_string(intentos))
+
+  case clave == "abreme" || intentos >= 3 {
+    True -> #(clave, intentos)        // caso base: hasta_que se cumplió
+    False -> bucle_3(clave, intentos) // sigue repitiendo
+  }
+}
+```
+
+Nótese que la condición lee `clave` e `intentos`, que son variables que el
+**cuerpo** acaba de crear. Por eso la gramática evalúa el `hasta_que` dentro
+del ámbito del cuerpo: si se evaluara fuera, esas variables no existirían.
+Esa decisión de alcance es la que hace que el bucle sea utilizable.
+
+### 3.5 `entregue_pues` anticipado
 
 Cuando el retorno **no** está en posición de cola hay que reestructurar el
 flujo. Es siempre posible porque el grafo de flujo de Paisascript es
@@ -265,7 +307,7 @@ El retorno anticipado dentro del bucle se convierte en una rama del `case`
 que simplemente **no vuelve a llamar** a la función recursiva. Salir del bucle
 y retornar son la misma operación.
 
-### 3.5 `pillemos` → `case`
+### 3.6 `pillemos` → `case`
 
 La traducción más directa de todas: es token a token.
 

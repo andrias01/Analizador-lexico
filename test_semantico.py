@@ -132,6 +132,109 @@ hable_pues(doble(x))
     else:
         print("OK   caso 4  — shadowing y ámbitos anidados sin errores")
 
+    # ------------------------------------------------------------------
+    # Caso 5: los TRES bucles bien escritos no producen ningún error
+    # ------------------------------------------------------------------
+    total += 1
+    codigo = r'''
+hagale_pues recorridos(numerito n) pa_que_lleve numerito dele_pues
+    // Bucle 1 - mientras_que (condición al principio)
+    pille_pues numerito suma = 0
+    pille_pues numerito i = 1
+    mientras_que i <= n dele_pues
+        pille_pues suma = suma + i
+        pille_pues i = i + 1
+    hasta_ahi
+
+    // Bucle 2 - pa_cada (contador con paso)
+    pa_cada k desde 0 hasta 10 de_a 2 dele_pues
+        hable_pues("k vale: " <> k)
+    listo_pues
+
+    // Bucle 3 - repita_pues (condición al final)
+    pille_pues numerito intentos = 0
+    repita_pues
+        pille_pues intentos = intentos + 1
+        hable_pues("intento " <> intentos)
+    hasta_que intentos >= 3
+
+    entregue_pues suma
+ya_quedo
+'''
+    errs_sint, errs_sem, _ = analizar(codigo)
+    if errs_sint or errs_sem:
+        fallos += 1
+        print("FALLO caso 5 (los tres bucles correctos)")
+        print("  sintácticos:", errs_sint)
+        print("  semánticos :", [str(e) for e in errs_sem])
+    else:
+        print("OK   caso 5  — los tres bucles (mientras_que, pa_cada, "
+              "repita_pues) sin errores")
+
+    # ------------------------------------------------------------------
+    # Caso 6: SEM-6 — bucles que no pueden terminar
+    # ------------------------------------------------------------------
+    total += 1
+    codigo = r'''
+pille_pues numerito tope = 10
+mientras_que tope > 0 dele_pues
+    hable_pues("el cuerpo no toca 'tope'")
+hasta_ahi
+
+mientras_que sizas dele_pues
+    hable_pues("condición constante")
+hasta_ahi
+
+pille_pues numerito veces = 0
+repita_pues
+    hable_pues("el cuerpo no toca 'veces'")
+hasta_que veces > 5
+'''
+    errs_sint, errs_sem, _ = analizar(codigo)
+    sem6 = [e for e in errs_sem if e.regla == "SEM-6"]
+    con_posicion = all(e.fila != "?" and e.columna != "?" for e in sem6)
+    if errs_sint or len(sem6) != 3 or not con_posicion:
+        fallos += 1
+        print("FALLO caso 6 (SEM-6: terminación del bucle)")
+        print("  sintácticos:", errs_sint)
+        print("  semánticos :", [str(e) for e in errs_sem])
+    else:
+        print("OK   caso 6  — SEM-6: 3 bucles no terminantes detectados "
+              "(2 mientras_que + 1 repita_pues) con fila/columna")
+
+    # ------------------------------------------------------------------
+    # Caso 7: SEM-7 y SEM-8 — variable de control y paso del pa_cada
+    # ------------------------------------------------------------------
+    total += 1
+    codigo = r'''
+pa_cada m desde 1 hasta 3 dele_pues
+    pille_pues m = 99
+listo_pues
+
+pa_cada i desde 1 hasta 10 de_a 0 dele_pues
+    hable_pues(i)
+listo_pues
+
+pa_cada j desde 10 hasta 1 dele_pues
+    hable_pues(j)
+listo_pues
+
+pa_cada q desde 1 hasta 10 de_a -1 dele_pues
+    hable_pues(q)
+listo_pues
+'''
+    errs_sint, errs_sem, _ = analizar(codigo)
+    sem7 = [e for e in errs_sem if e.regla == "SEM-7"]
+    sem8 = [e for e in errs_sem if e.regla == "SEM-8"]
+    if errs_sint or len(sem7) != 1 or len(sem8) != 3:
+        fallos += 1
+        print("FALLO caso 7 (SEM-7 / SEM-8: pa_cada)")
+        print("  sintácticos:", errs_sint)
+        print("  semánticos :", [str(e) for e in errs_sem])
+    else:
+        print("OK   caso 7  — SEM-7: 1 escritura sobre la variable de control; "
+              "SEM-8: 3 recorridos imposibles (paso 0 y dos direcciones malas)")
+
     print()
     if fallos:
         print(f"RESULTADO: {fallos}/{total} prueba(s) fallaron.")

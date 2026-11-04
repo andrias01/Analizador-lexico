@@ -57,6 +57,8 @@ class TipoToken(Enum):
     KW_HASTA = auto()            # hasta
     KW_PASO = auto()             # de_a
     KW_FIN_PARA = auto()         # listo_pues      -> }
+    KW_REPITA = auto()           # repita_pues     -> recursion de cola (cuerpo primero)
+    KW_HASTA_QUE = auto()        # hasta_que       -> condicion de salida del repita
     KW_PILLEMOS = auto()         # pillemos        -> case
     KW_FLECHA = auto()           # pa_que_lleve    -> ->
 
@@ -161,6 +163,8 @@ PALABRAS_RESERVADAS = {
     "hasta":         TipoToken.KW_HASTA,
     "de_a":          TipoToken.KW_PASO,
     "listo_pues":    TipoToken.KW_FIN_PARA,
+    "repita_pues":   TipoToken.KW_REPITA,
+    "hasta_que":     TipoToken.KW_HASTA_QUE,
     "pillemos":      TipoToken.KW_PILLEMOS,
     "pa_que_lleve":  TipoToken.KW_FLECHA,
     # Tipos

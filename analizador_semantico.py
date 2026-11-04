@@ -8,7 +8,7 @@ derivación concreta) que produce `parser.Parser`, lo recorre con un visitor y
 construye una tabla de símbolos. No modifica el parser ni depende de él más
 allá de la forma del árbol.
 
-Reglas semánticas implementadas (SEM-1 .. SEM-5, ver documento PDF):
+Reglas semánticas implementadas (SEM-1 .. SEM-8, ver documento PDF):
 
   SEM-1  <sent_declaracion>
          Atributo sintetizado  type(expr).
@@ -36,6 +36,28 @@ Reglas semánticas implementadas (SEM-1 .. SEM-5, ver documento PDF):
          Restricción: la función debe existir, la aridad debe coincidir y
          cada argumento debe tener el tipo del parámetro formal.
          Acción: consultar la firma en la tabla de símbolos y comparar.
+
+  SEM-6  <sent_mientras>, <sent_repita>   (REGLAS DE BUCLE)
+         Atributos sintetizados  leidas(cond) y redefinidas(cuerpo).
+         Restricción: leidas(cond) ∩ redefinidas(cuerpo) ≠ ∅ y la condición
+         no puede ser un literal constante.
+         Acción: recolectar ambos conjuntos en una pasada sobre el subárbol,
+         intersecarlos y reportar el bucle que no puede terminar.
+
+  SEM-7  <sent_para>  (variable de control de solo lectura)
+         Atributo heredado  escribible = falso para la variable de control.
+         Restricción: el cuerpo del `pa_cada` no puede redefinir (pille_pues)
+         ni leer con `escuche_pues` la variable de control.
+         Acción: marcar el símbolo como no escribible al abrir el ámbito del
+         bucle y comprobar cada redefinición contra ese atributo.
+
+  SEM-8  <sent_para>, <paso_opcional>  (paso y recorrido alcanzable)
+         Atributos sintetizados  valor(desde), valor(hasta), valor(paso) por
+         plegado de constantes, y direccion.
+         Restricción: valor(paso) ≠ 0; si paso > 0 entonces desde ≤ hasta; si
+         paso < 0 entonces desde ≥ hasta.
+         Acción: plegar las constantes literales, comparar signo y límites, y
+         reportar el bucle que nunca avanza o nunca se ejecuta.
 
 Recuperación de errores: cada violación se registra en `self.errores` y el
 recorrido CONTINÚA. Las expresiones con error sintetizan el tipo especial
@@ -129,7 +151,7 @@ class Simbolo:
 
     def __init__(self, lexema, tipo, categoria, fila="?", columna="?",
                  ambito="global", inicializada=False, params=None,
-                 tipo_retorno=None):
+                 tipo_retorno=None, escribible=True):
         self.lexema = lexema
         self.tipo = tipo                  # numerito | quebradito | cuento | siono | desconocido
         self.categoria = categoria        # variable | parametro | funcion | bucle | patron
@@ -139,6 +161,10 @@ class Simbolo:
         self.inicializada = inicializada
         self.params = list(params or [])  # solo para funciones: lista de Simbolo
         self.tipo_retorno = tipo_retorno  # solo para funciones
+        # SEM-7: atributo HEREDADO. La variable de control de un `pa_cada`
+        # entra al ámbito del bucle con escribible = False, porque al generar
+        # Gleam se vuelve el parámetro de un `fn(i) { ... }` de list.each.
+        self.escribible = escribible
 
     def como_fila(self):
         if self.categoria == "funcion":
@@ -154,6 +180,7 @@ class Simbolo:
             "Fila": self.fila,
             "Columna": self.columna,
             "Inicializada": "sí" if self.inicializada else "no",
+            "Escribible": "sí" if self.escribible else "no (solo lectura)",
             "Detalle": detalle,
         }
 
@@ -253,6 +280,24 @@ class AnalizadorSemantico:
     @staticmethod
     def _es_eps(nodo):
         return AnalizadorSemantico._nombre(nodo) == "ε"
+
+    @staticmethod
+    def _deriva_vacio(nodo):
+        """True si el subárbol solo deriva en ε (una cola vacía del CST).
+
+        Los no terminales factorizados (`<expr_o_p>`, `<expr_aditiva_p>`, …)
+        siempre aparecen como hijos, incluso cuando están vacíos: envuelven al
+        nodo ε en lugar de ser ese nodo. El plegado de constantes necesita
+        saltarlos para ver la verdadera forma de la expresión.
+        """
+        if not isinstance(nodo, dict):
+            return False
+        if AnalizadorSemantico._es_eps(nodo):
+            return True
+        hijos = nodo.get("hijos") or []
+        if not hijos:
+            return False
+        return all(AnalizadorSemantico._deriva_vacio(h) for h in hijos)
 
     @staticmethod
     def _token_tipo(nodo):
@@ -488,6 +533,9 @@ class AnalizadorSemantico:
         tipo_declarado = self._tipo_de_nodo(hijos[1])
         tipo_expr = self._tipo_expr(hijos[4])
 
+        # SEM-7: no se puede redefinir la variable de control de un `pa_cada`.
+        self._exigir_escribible(hoja_id, "redefinir con 'pille_pues'")
+
         if (tipo_declarado not in (DESCONOCIDO, ERROR)
                 and tipo_expr not in (DESCONOCIDO, ERROR)
                 and tipo_expr != tipo_declarado):
@@ -522,6 +570,8 @@ class AnalizadorSemantico:
         if hoja_id is None:
             return
         nombre = self._lexema(hoja_id)
+        # SEM-7: `escuche_pues` también reescribe el enlace.
+        self._exigir_escribible(hoja_id, "leer con 'escuche_pues'")
         simbolo = self.tabla.buscar(nombre)
         if simbolo is None:
             # `escuche_pues(x)` declara x; su tipo se infiere por el uso.
@@ -578,11 +628,170 @@ class AnalizadorSemantico:
             self._visitar(hijo)
 
     def _v_sent_mientras(self, nodo):
+        # mientras_que <expresion> dele_pues <bloque> hasta_ahi
         hijos = self._hijos(nodo)
         if len(hijos) < 4:
             return
-        self._exigir_condicion(hijos[1], "mientras_que")
-        self._visitar(hijos[3])
+        condicion, cuerpo = hijos[1], hijos[3]
+        self._exigir_condicion(condicion, "mientras_que")
+        self.tabla.abrir("mientras_que")
+        self._visitar(cuerpo)
+        self.tabla.cerrar()
+        # SEM-6: el bucle avanza mientras la condición sea verdadera.
+        self._exigir_progreso(nodo, condicion, cuerpo, "mientras_que",
+                              continua_si=True)
+
+    # ------------------------------------------------------------------
+    #  SEM-4 / SEM-6: bucle de condición al final (post-test)
+    # ------------------------------------------------------------------
+    def _v_sent_repita(self, nodo):
+        """repita_pues <bloque> hasta_que <expresion>
+
+        El cuerpo corre al menos una vez y `hasta_que` es la condición de
+        SALIDA. La condición se evalúa DENTRO del ámbito del cuerpo: puede
+        leer las variables que el cuerpo acaba de crear, igual que el estado
+        que el generador de Gleam pasa a la recursión de cola.
+        """
+        hijos = self._hijos(nodo)
+        if len(hijos) < 4:
+            return
+        cuerpo, condicion = hijos[1], hijos[3]
+        self.tabla.abrir("repita_pues")
+        self._visitar(cuerpo)
+        self._exigir_condicion(condicion, "hasta_que")
+        self.tabla.cerrar()
+        # SEM-6: el bucle avanza mientras la condición de salida sea FALSA.
+        self._exigir_progreso(nodo, condicion, cuerpo, "repita_pues",
+                              continua_si=False)
+
+    # ------------------------------------------------------------------
+    #  SEM-6: terminación del bucle (condición constante y progreso)
+    # ------------------------------------------------------------------
+    def _exigir_progreso(self, nodo_bucle, nodo_cond, nodo_cuerpo,
+                         construccion, continua_si):
+        """Comprueba que el bucle pueda terminar.
+
+        Dos atributos sintetizados:
+          leidas(cond)        identificadores que la condición consulta.
+          redefinidas(cuerpo) identificadores que el cuerpo vuelve a enlazar
+                              con `pille_pues`, `escuche_pues` o asignación.
+
+        Restricción: leidas(cond) ∩ redefinidas(cuerpo) ≠ ∅ y la condición no
+        puede ser el literal que mantiene el bucle vivo. Es una comprobación
+        conservadora: si la intersección es vacía, NINGUNA ejecución puede
+        cambiar el valor de la condición, porque Paisascript es inmutable y
+        sin efectos laterales. Al traducir a Gleam ese bucle sería una
+        recursión de cola que nunca alcanza su caso base.
+        """
+        constante = self._constante(nodo_cond)
+        if isinstance(constante, bool):
+            if constante is continua_si:
+                literal = "sizas" if constante else "naranjas"
+                self._error(
+                    nodo_cond,
+                    f"La condición de '{construccion}' es la constante "
+                    f"'{literal}': el bucle nunca termina",
+                    "SEM-6",
+                )
+            return
+
+        leidas = self._ids_leidos(nodo_cond)
+        if not leidas:
+            self._error(
+                nodo_cond,
+                f"La condición de '{construccion}' no depende de ninguna "
+                f"variable: su valor no cambia y el bucle nunca termina",
+                "SEM-6",
+            )
+            return
+
+        redefinidas = self._ids_redefinidos(nodo_cuerpo)
+        if not (leidas & redefinidas):
+            nombres = ", ".join(sorted(leidas))
+            self._error(
+                nodo_bucle,
+                f"El cuerpo de '{construccion}' no redefine ninguna variable "
+                f"de la condición ({nombres}): el bucle nunca termina. Use "
+                f"'pille_pues' sobre una de ellas para hacerlo avanzar",
+                "SEM-6",
+            )
+
+    def _ids_leidos(self, nodo):
+        """Identificadores que el subárbol LEE (sin contar nombres de función)."""
+        encontrados = set()
+
+        def recorrer(n):
+            if not isinstance(n, dict):
+                return
+            hijos = self._hijos(n)
+            if not hijos and self._token_tipo(n) == "IDENTIFICADOR":
+                nombre = self._lexema(n)
+                simbolo = self.tabla.buscar(nombre)
+                if simbolo is None or simbolo.categoria != "funcion":
+                    encontrados.add(nombre)
+            for hijo in hijos:
+                recorrer(hijo)
+
+        recorrer(nodo)
+        return encontrados
+
+    def _ids_redefinidos(self, nodo):
+        """Identificadores que el subárbol vuelve a enlazar (el estado del bucle)."""
+        encontrados = set()
+
+        def recorrer(n):
+            if not isinstance(n, dict):
+                return
+            nombre_nt = self._nombre(n)
+            hijos = self._hijos(n)
+            if nombre_nt == "sent_declaracion" and len(hijos) >= 3:
+                encontrados.add(self._lexema(hijos[2]))
+            elif nombre_nt == "sent_asignacion" and hijos:
+                encontrados.add(self._lexema(hijos[0]))
+            elif nombre_nt == "sent_lectura":
+                for hijo in hijos:
+                    if self._token_tipo(hijo) == "IDENTIFICADOR":
+                        encontrados.add(self._lexema(hijo))
+            for hijo in hijos:
+                recorrer(hijo)
+
+        recorrer(nodo)
+        encontrados.discard("")
+        return encontrados
+
+    def _constante(self, nodo):
+        """Plegado de constantes: valor literal del subárbol, o None.
+
+        Devuelve int, float o bool cuando la expresión es un literal (admite
+        el menos unario y los paréntesis). Es el atributo sintetizado `valor`
+        que usan SEM-6 y SEM-8.
+        """
+        if not isinstance(nodo, dict):
+            return None
+        hijos = [h for h in self._hijos(nodo) if not self._deriva_vacio(h)]
+        if not hijos:
+            tipo_token = self._token_tipo(nodo)
+            lexema = self._lexema(nodo)
+            try:
+                if tipo_token == "NUM_ENTERO":
+                    return int(lexema)
+                if tipo_token == "NUM_REAL":
+                    return float(lexema)
+            except ValueError:
+                return None
+            if tipo_token == "LIT_VERDADERO" or lexema == "sizas":
+                return True
+            if tipo_token == "LIT_FALSO" or lexema == "naranjas":
+                return False
+            return None
+        if len(hijos) == 2 and self._token_tipo(hijos[0]) == "OP_RESTA":
+            valor = self._constante(hijos[1])
+            return None if valor is None or isinstance(valor, bool) else -valor
+        if len(hijos) == 3 and self._token_tipo(hijos[0]) == "PAR_ABRE":
+            return self._constante(hijos[1])
+        if len(hijos) == 1:
+            return self._constante(hijos[0])
+        return None
 
     def _exigir_condicion(self, nodo_expr, construccion):
         tipo = self._tipo_expr(nodo_expr)
@@ -597,10 +806,10 @@ class AnalizadorSemantico:
     #  SEM-3: operadores aritméticos, lógicos y relacionales
     # ------------------------------------------------------------------
     def _v_sent_para(self, nodo):
+        # pa_cada ID desde <expr> hasta <expr> [de_a <expr>] dele_pues <bloque> listo_pues
         hijos = self._hijos(nodo)
         if len(hijos) < 9:
             return
-        # pa_cada ID desde <expr> hasta <expr> [de_a <expr>] dele_pues <bloque> listo_pues
         hoja_var = hijos[1]
         nombre_var = self._lexema(hoja_var)
         for indice, etiqueta in ((3, "desde"), (5, "hasta")):
@@ -612,10 +821,13 @@ class AnalizadorSemantico:
                     f"pero es {tipo}",
                     "SEM-3",
                 )
+
+        nodo_paso = None
         paso = hijos[6]
         if not self._es_eps(paso):
             for hijo in self._hijos(paso):
                 if self._nombre(hijo) == "expresion":
+                    nodo_paso = hijo
                     tipo = self._tipo_expr(hijo)
                     if tipo not in (NUMERITO, ERROR, DESCONOCIDO):
                         self._error(
@@ -624,14 +836,91 @@ class AnalizadorSemantico:
                             "SEM-3",
                         )
 
+        # SEM-8: paso distinto de cero y recorrido alcanzable.
+        self._exigir_recorrido(nodo, hijos[3], hijos[5], nodo_paso)
+
+        # SEM-7: la variable de control entra al ámbito del bucle como
+        # SOLO LECTURA (atributo heredado escribible = falso).
         self.tabla.abrir(f"para {nombre_var}")
         self.tabla.declarar(Simbolo(
             nombre_var, NUMERITO, "bucle",
             hoja_var.get("fila", "?"), hoja_var.get("columna", "?"),
-            self.tabla.ambito_actual, inicializada=True,
+            self.tabla.ambito_actual, inicializada=True, escribible=False,
         ))
         self._visitar(self._hijo_nt(nodo, "bloque"))
         self.tabla.cerrar()
+
+    # ------------------------------------------------------------------
+    #  SEM-7: la variable de control del `pa_cada` es de solo lectura
+    # ------------------------------------------------------------------
+    def _exigir_escribible(self, hoja_id, accion):
+        """Comprueba el atributo heredado `escribible` del símbolo visible.
+
+        La variable de control de un `pa_cada` se traduce al parámetro de un
+        `fn(i) { ... }` dentro de `list.each`. Volver a enlazarla dentro del
+        cuerpo rompería el recorrido, así que el símbolo entra al ámbito con
+        escribible = falso y aquí se verifica antes de cada redefinición.
+        """
+        nombre = self._lexema(hoja_id)
+        simbolo = self.tabla.buscar(nombre)
+        if simbolo is not None and not simbolo.escribible:
+            self._error(
+                hoja_id,
+                f"'{nombre}' es la variable de control de un 'pa_cada' y es de "
+                f"solo lectura dentro del bucle: no se puede {accion}. Use otro "
+                f"nombre para la variable nueva",
+                "SEM-7",
+            )
+            return False
+        return True
+
+    # ------------------------------------------------------------------
+    #  SEM-8: paso del `pa_cada` y recorrido alcanzable
+    # ------------------------------------------------------------------
+    def _exigir_recorrido(self, nodo_bucle, nodo_desde, nodo_hasta, nodo_paso):
+        """Valida el paso y la dirección del recorrido por plegado de constantes.
+
+        Atributos sintetizados: valor(desde), valor(hasta), valor(paso) y la
+        dirección que de ellos se deduce. Las comprobaciones solo se aplican
+        cuando los tres valores son literales: con expresiones variables el
+        recorrido no es decidible en tiempo de compilación y la regla calla.
+        """
+        paso = 1 if nodo_paso is None else self._constante(nodo_paso)
+        if isinstance(paso, bool):
+            paso = None
+
+        if paso == 0:
+            self._error(
+                nodo_paso,
+                "El paso 'de_a' no puede ser 0: la variable de control nunca "
+                "avanzaría y el bucle no termina",
+                "SEM-8",
+            )
+            return
+
+        desde = self._constante(nodo_desde)
+        hasta = self._constante(nodo_hasta)
+        if paso is None or isinstance(desde, bool) or isinstance(hasta, bool):
+            return
+        if desde is None or hasta is None:
+            return
+
+        if paso > 0 and desde > hasta:
+            self._error(
+                nodo_bucle,
+                f"El 'pa_cada' va de {desde} a {hasta} con paso {paso}: el "
+                f"paso es positivo pero el límite inferior es mayor que el "
+                f"superior, así que el cuerpo nunca se ejecuta",
+                "SEM-8",
+            )
+        elif paso < 0 and desde < hasta:
+            self._error(
+                nodo_bucle,
+                f"El 'pa_cada' va de {desde} a {hasta} con paso {paso}: el "
+                f"paso es negativo pero el límite inferior es menor que el "
+                f"superior, así que el cuerpo nunca se ejecuta",
+                "SEM-8",
+            )
 
     def _v_sent_pillemos(self, nodo):
         hijos = self._hijos(nodo)

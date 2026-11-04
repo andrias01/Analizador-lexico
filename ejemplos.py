@@ -3,8 +3,9 @@
 ejemplos.py — Cadenas predefinidas para el analizador lexico de Paisascript.
 
 Cubren distintos programas del lenguaje (requisito 11 del enunciado): E/S,
-funciones, condicionales, los dos tipos de bucle, calce de patrones, y un
-caso dedicado a los errores lexicos.
+funciones, condicionales, los TRES tipos de bucle (mientras_que, pa_cada y
+repita_pues), calce de patrones, y casos dedicados a los errores lexicos y
+semanticos.
 
 Cada entrada es (titulo, descripcion, codigo).
 """
@@ -65,6 +66,55 @@ pille_pues quebradito radio = 2.5
 pille_pues quebradito area = 3.1416 * radio ** 2.0
 pille_pues quebradito sobrante = 17.0 - 4.0 / 2.0
 hable_pues(area)''',
+    ),
+    (
+        "Bucle repita_pues con condicion al final",
+        "El tercer bucle: post-test. El cuerpo corre al menos una vez y hasta_que es la condicion de SALIDA.",
+        '''// Pide la clave hasta que acierte o se agoten los tres intentos.
+// El cuerpo corre primero y SOLO despues se comprueba la condicion, asi
+// que siempre se pide la clave por lo menos una vez.
+pille_pues numerito intentos = 0
+pille_pues cuento clave = ""
+repita_pues
+    escuche_pues(clave)
+    pille_pues intentos = intentos + 1
+    hable_pues("Intento numero " <> intentos)
+hasta_que clave igualito "abreme" o_que intentos >= 3
+
+si_acaso clave igualito "abreme" entonces_pues
+    hable_pues("Entre pues, mijo")
+sino_pues
+    hable_pues("Se le acabaron los intentos")
+asi_quedo''',
+    ),
+    (
+        "Los tres bucles en un solo programa",
+        "mientras_que (pre-test), pa_cada (contador) y repita_pues (post-test). Los tres se traducen a recursion de cola en Gleam.",
+        '''hagale_pues demostracion(numerito n) pa_que_lleve numerito dele_pues
+    // 1) mientras_que: condicion al principio, puede no entrar nunca
+    pille_pues numerito suma = 0
+    pille_pues numerito i = 1
+    mientras_que i <= n dele_pues
+        pille_pues suma = suma + i
+        pille_pues i = i + 1
+    hasta_ahi
+
+    // 2) pa_cada: contador con limites y paso explicito
+    pa_cada k desde 0 hasta 10 de_a 2 dele_pues
+        hable_pues("k vale: " <> k)
+    listo_pues
+
+    // 3) repita_pues: condicion al final, entra al menos una vez
+    pille_pues numerito intentos = 0
+    repita_pues
+        pille_pues intentos = intentos + 1
+        hable_pues("vuelta " <> intentos)
+    hasta_que intentos >= 3
+
+    entregue_pues suma
+ya_quedo
+
+hable_pues(demostracion(5))''',
     ),
     (
         "Calce de patrones y operadores logicos",
@@ -166,5 +216,40 @@ si_acaso cantidad entonces_pues
 asi_quedo
 pille_pues quebradito promedio = promediar(5)
 hable_pues(promedio)''',
+    ),
+    (
+        "ERRORES DE BUCLE deliberados (SEM-6, SEM-7, SEM-8)",
+        "Bucles que no pueden terminar, escritura sobre la variable de control y pasos imposibles.",
+        '''// SEM-6: el cuerpo no redefine 'tope', la condicion nunca cambia
+pille_pues numerito tope = 10
+mientras_que tope > 0 dele_pues
+    hable_pues("doy vueltas sin avanzar")
+hasta_ahi
+
+// SEM-6: condicion constante
+mientras_que sizas dele_pues
+    hable_pues("esto no para")
+hasta_ahi
+
+// SEM-6: en repita_pues, hasta_que es la condicion de SALIDA
+pille_pues numerito veces = 0
+repita_pues
+    hable_pues("tampoco avanzo")
+hasta_que veces > 5
+
+// SEM-7: 'm' es la variable de control, es de solo lectura
+pa_cada m desde 1 hasta 3 dele_pues
+    pille_pues m = 99
+listo_pues
+
+// SEM-8: paso 0, la variable de control nunca avanza
+pa_cada i desde 1 hasta 10 de_a 0 dele_pues
+    hable_pues(i)
+listo_pues
+
+// SEM-8: paso positivo pero desde > hasta, el cuerpo nunca se ejecuta
+pa_cada j desde 10 hasta 1 dele_pues
+    hable_pues(j)
+listo_pues''',
     ),
 ]
