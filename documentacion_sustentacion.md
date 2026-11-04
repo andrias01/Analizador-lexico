@@ -66,7 +66,7 @@ Medidas ejecutando `venv/bin/python` sobre `generar_tabla_lalr1_completa()` +
 | Estados LALR(1) tras la fusión por núcleo | **195** |
 | Estados eliminados por la fusión | **1508** |
 | **Reducción** | **88.5 %** |
-| Tabla **ACTION** | **195 filas × 55 columnas** = 3231 celdas |
+| Tabla **ACTION** | **195 filas × 55 columnas** = 10 725 celdas, de las que **3231 están llenas** (499 `s` + 2730 `r` + 2 `acc`) |
 | · de ellas, `s{n}` (desplazar) | **499** |
 | · de ellas, `r{k}` (reducir) | **2730** |
 | · de ellas, `acc` (aceptar) | **2** (`$` y `FIN_ARCHIVO`) |
@@ -863,8 +863,9 @@ GOTO, 106 producciones, 52 no terminales, 0 conflictos, ≈2.1 s.
    estado tiene 15 celdas llenas y `$` no es una. Explica un error sintáctico
    **usando la tabla**, que es exactamente lo que pide el 50 % de la nota.
 5. **Cifras para citar sin dudar:** 1703 → 195 estados (88.5 %), 1508 estados
-   fusionados, 402 entradas GOTO, 106 producciones, 52 no terminales, 3231
-   celdas ACTION (499 `s` + 2730 `r` + 2 `acc`), 0 conflictos, ≈2.1 s.
+   fusionados, 402 entradas GOTO, 106 producciones, 52 no terminales, ACTION
+   195 × 55 con **3231 celdas llenas** (499 `s` + 2730 `r` + 2 `acc`), 0
+   conflictos, ≈2.1 s.
 6. **Los tres métodos con la misma entrada** (recursivo 89 / LL(1) 70 / LALR 69
    pasos) es un dato rápido que demuestra que los tres analizadores están
    vivos y son consistentes.

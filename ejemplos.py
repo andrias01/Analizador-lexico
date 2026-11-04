@@ -62,14 +62,18 @@ hable_pues(sumatoria(100))''',
 listo_pues
 
 pille_pues quebradito radio = 2.5
-pille_pues quebradito area = 3.1416 * radio ** 2
-pille_pues quebradito sobrante = 17 - 4 / 2
+pille_pues quebradito area = 3.1416 * radio ** 2.0
+pille_pues quebradito sobrante = 17.0 - 4.0 / 2.0
 hable_pues(area)''',
     ),
     (
         "Calce de patrones y operadores logicos",
         "pillemos con literales, comodin y bloque; y_tambien / o_que / nanai.",
-        '''pillemos resultado {
+        '''escuche_pues(resultado)
+escuche_pues(edad)
+escuche_pues(tiene_permiso)
+
+pillemos resultado {
     10       pa_que_lleve hable_pues("Sacaste diez, que elegancia")
     "error"  pa_que_lleve hable_pues("Algo salio mal, mijo")
     sizas    pa_que_lleve {
@@ -128,5 +132,39 @@ pille_pues y = "sin cerrar
 pille_pues z = 3.
 hable_pues(a $ b)
 pille_pues bien = 42''',
+    ),
+    (
+        "ANALISIS SEMANTICO — programa correcto",
+        "Tipos coherentes, funciones, llamadas y ámbitos: SEM-1 a SEM-5 sin errores.",
+        '''hagale_pues promediar(numerito a, numerito b) pa_que_lleve numerito dele_pues
+    pille_pues numerito suma = a + b
+    entregue_pues suma
+ya_quedo
+
+pille_pues numerito cantidad = 3
+pille_pues quebradito precio = 19.99
+pille_pues quebradito total = precio * 2.0
+si_acaso cantidad > 0 entonces_pues
+    hable_pues("Total: " <> total)
+asi_quedo
+hable_pues(promediar(4, 6))''',
+    ),
+    (
+        "ERRORES SEMANTICOS deliberados",
+        "Acumula violaciones de SEM-1..SEM-5; el analisis semantico sigue y las reporta todas.",
+        '''hagale_pues promediar(numerito a, numerito b) pa_que_lleve quebradito dele_pues
+    entregue_pues a + b
+ya_quedo
+
+pille_pues numerito edad = "veinte"
+pille_pues quebradito precio = 19.99
+pille_pues numerito cantidad = 3
+pille_pues total = precio + cantidad
+hable_pues(saldo_disponible)
+si_acaso cantidad entonces_pues
+    hable_pues("hay unidades")
+asi_quedo
+pille_pues quebradito promedio = promediar(5)
+hable_pues(promedio)''',
     ),
 ]

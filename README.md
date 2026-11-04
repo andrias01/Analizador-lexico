@@ -46,6 +46,11 @@ Se abre en `http://localhost:8501`. Si `streamlit` no está en el PATH:
 py -3.12 -m streamlit run app.py
 ```
 
+> **IA opcional:** `openai` y `python-dotenv` solo hacen falta para el bonus de
+> IA. Si no están instalados, la app arranca igual y muestra un aviso en la
+> barra lateral; para habilitar el botón de IA ejecute
+> `pip install openai python-dotenv` y configure `OPENAI_API_KEY`.
+
 ### Publicar en Streamlit Community Cloud
 
 Ya está desplegada en **[compiladorlex.streamlit.app](https://compiladorlex.streamlit.app/)**.
@@ -110,9 +115,14 @@ Ambas interfaces ofrecen los mismos tres (requisito 11 del enunciado):
 | :--- | :--- |
 | `gramatica_BNF_Paisascript.txt` | Gramática BNF completa: descripción informal, terminales por categoría, 54 reglas de producción sin recursividad izquierda, **verificación LL(1)**, ejemplos válidos e inválidos y justificación de coherencia con Gleam |
 | `lexer.py` | **Módulo reutilizable** del analizador léxico. No imprime ni lee nada |
+| `parser.py` | Analizador sintáctico descendente recursivo LL(1); construye el CST con posición en cada hoja |
+| `analizador_semantico.py` | **Fase semántica independiente**: visitor sobre el CST, tabla de símbolos por ámbitos y reglas SEM-1 a SEM-5 |
 | `app.py` | Interfaz web en Streamlit |
 | `main.py` | Interfaz de consola con colores ANSI |
-| `ejemplos.py` | Las ocho cadenas predefinidas |
+| `ejemplos.py` | Las diez cadenas predefinidas (incluye ejemplos semánticos) |
+| `test_semantico.py` | Pruebas automáticas del análisis semántico (sin Streamlit ni pandas) |
+| `generar_documento_semantico.py` | Genera el PDF de la Parte 1 (gramática en rojo + reglas en ámbar) |
+| `gramatica_ampliada_semantica.pdf` | Documento entregable del Quiz 4 / Entrega 4 |
 | `mapeo_gleam.py` | Correspondencia token → construcción de Gleam, en código |
 | `MAPEO_GLEAM.md` | Traducción trabajada de cada constructo a Gleam |
 | `requirements.txt` | Dependencias de la interfaz web |
@@ -357,6 +367,27 @@ Las traducciones trabajadas de punta a punta están en
 | Tabla de símbolos con fila y columna | Pestaña «Tabla de símbolos», descargable en CSV |
 | Reporte de errores sin abortar | Pestaña «Errores léxicos», con cursor bajo el error |
 | Código documentado + README | Este archivo |
+
+### Entregable 4 — Análisis semántico (Quiz 4)
+
+| Regla | Nodo de la gramática | Qué valida |
+| :--- | :--- | :--- |
+| SEM-1 | `<sent_declaracion>` | El tipo anotado coincide con el tipo inferido de la expresión |
+| SEM-2 | `<expr_primaria>`, `<sent_lectura>` | El identificador está declarado en el ámbito actual o en un ancestro |
+| SEM-3 | Producciones de expresiones | Operandos compatibles; `%` solo `numerito`; lógicos/condiciones `siono` |
+| SEM-4 | `<sent_si>`, `<sent_mientras>` | La condición de control es `siono` |
+| SEM-5 | `<sent_llamada>`, `<sufijo_id>` | La función existe, la aridad coincide y los tipos de argumento son correctos |
+
+La fase semántica está separada del parser (`analizador_semantico.py`), construye
+una tabla de símbolos con tipos, ámbitos y estado de inicialización, reporta cada
+error con **fila, columna, lexema y mensaje**, y continúa el análisis tras cada
+error (recuperación). Está integrada en la pestaña **«Análisis Semántico»** de la
+interfaz web, con la sugerencia opcional de IA (Modalidad A del bonus).
+
+```bash
+python test_semantico.py                    # 4 pruebas automáticas
+python generar_documento_semantico.py       # regenera el PDF entregable
+```
 
 ### Capacidades mínimas del §2 del enunciado
 

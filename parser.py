@@ -120,8 +120,24 @@ class Parser:
             lexema = self._obtener_lexema()
 
             if tipo in esperados or lexema in esperados:
+                # Se conserva la informacion de posicion del token en la hoja
+                # del arbol. El analizador semantico (fase independiente) la
+                # necesita para reportar fila/columna/lexema. Las claves nuevas
+                # son ignoradas por los consumidores actuales del CST, que solo
+                # leen "tipo", "hijos" y "es_terminal".
+                token = self.token_actual
+                fila = getattr(token, 'fila', getattr(token, 'linea', '?'))
+                columna = getattr(token, 'columna', '?')
                 self.avanzar()
-                nodo = {"tipo": f"{tipo} ({lexema})", "es_terminal": True, "hijos": []}
+                nodo = {
+                    "tipo": f"{tipo} ({lexema})",
+                    "es_terminal": True,
+                    "hijos": [],
+                    "token_tipo": tipo,
+                    "lexema": lexema,
+                    "fila": fila,
+                    "columna": columna,
+                }
                 return self._adjuntar(nodo, f"Coincidencia: {tipo} ('{lexema}')")
 
         esperados_str = " | ".join(map(str, esperados))

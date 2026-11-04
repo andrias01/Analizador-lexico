@@ -1,0 +1,22 @@
+// Programa de DEMOSTRACIÓN del análisis semántico (Quiz 4 / Entrega 4).
+// Es léxica y sintácticamente válido, pero acumula errores de las cinco
+// reglas semánticas para mostrar que el compilador NO se detiene y reporta
+// todos los errores en una sola pasada.
+
+hagale_pues promediar(numerito a, numerito b) pa_que_lleve quebradito dele_pues
+    entregue_pues a + b          // SEM-5: retorna numerito en función quebradito
+ya_quedo
+
+pille_pues numerito edad = "veinte"        // SEM-1: cuento asignado a numerito
+pille_pues quebradito precio = 19.99
+pille_pues numerito cantidad = 3
+pille_pues total = precio + cantidad       // SEM-3: mezcla quebradito con numerito
+
+hable_pues(saldo_disponible)               // SEM-2: identificador no declarado
+
+si_acaso cantidad entonces_pues            // SEM-4: la condición debe ser siono
+    hable_pues("hay unidades")
+asi_quedo
+
+pille_pues quebradito promedio = promediar(5)   // SEM-5: faltan argumentos
+hable_pues(promedio)

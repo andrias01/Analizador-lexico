@@ -632,7 +632,7 @@ unico token de anticipacion, sin retroceso.
 
     pillemos x { }                      // <lista_casos> exige al menos un caso
 
---- 6.3 Errores SEMANTICOS (los detectara el analizador de la entrega 3) ------
+--- 6.3 Errores SEMANTICOS (los detecta el analizador semantico, entrega 4) ---
 
     pille_pues numerito x = "hola"      // tipo declarado != tipo de la expresion
     pille_pues y = 3 + 2.5              // Gleam no mezcla Int con Float
@@ -803,8 +803,11 @@ es un subconjunto de lo que Gleam puede expresar.
 
   Analisis lexico        lexer.py + main.py                ENTREGA 1 completo
   Gramatica BNF LL(1)    este documento                    ENTREGA 1 completo
-  Analisis sintactico    parser descendente recursivo      pendiente
-  Analisis semantico     tabla de simbolos, tipos Int/Float pendiente
+  Analisis sintactico    parser descendente recursivo      ENTREGA 2/3 completo
+  Analisis semantico     analizador_semantico.py           ENTREGA 4 completo
+                         (tabla de simbolos por ambitos,
+                          reglas SEM-1 a SEM-5, reporte con
+                          fila/columna/lexema y recuperacion)
   Generacion de codigo   emisor de Gleam                   pendiente
 
 El detalle completo de la traduccion, con ejemplos trabajados de punta a

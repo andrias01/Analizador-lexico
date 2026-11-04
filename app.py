@@ -43,8 +43,39 @@ except ImportError:
 # ventana navegable; la tabla y el CSV de arriba siempre llevan la traza entera.
 N_PASOS_DETALLE = 30
 
-# --- IMPORTACIÓN DEL ASISTENTE DE IA ---
-from ai_assistant import analizar_error_con_ia, origen_api_key
+# --- IMPORTACIÓN DEL ASISTENTE DE IA (OPCIONAL) ---
+# La app debe arrancar aunque el módulo de IA no esté disponible (por ejemplo,
+# si el entorno no tiene instalado el paquete `openai`). En ese caso se usan
+# funciones de reserva que solo informan que el bonus está deshabilitado.
+try:
+    from ai_assistant import (
+        OPENAI_DISPONIBLE,
+        analizar_error_con_ia,
+        analizar_error_semantico_con_ia,
+        origen_api_key,
+    )
+except Exception:
+    OPENAI_DISPONIBLE = False
+
+    _MENSAJE_SIN_IA = (
+        "⚠️ La integración con IA no está disponible en este entorno porque "
+        "falta el paquete `openai`. El analizador léxico, sintáctico y "
+        "semántico funciona con normalidad. Para habilitar el bonus ejecute: "
+        "`pip install openai python-dotenv`."
+    )
+
+    def origen_api_key():
+        return None
+
+    def analizar_error_con_ia(codigo_fuente, error_detectado, api_key=None):
+        return _MENSAJE_SIN_IA
+
+    def analizar_error_semantico_con_ia(codigo_fuente, errores_semanticos,
+                                        tabla_simbolos=None, api_key=None):
+        return _MENSAJE_SIN_IA
+
+# --- ANÁLISIS SEMÁNTICO (Quiz 4 / Entrega 4) ---
+from analizador_semantico import AnalizadorSemantico, ErrorSemantico, TablaSimbolos
 
 RAIZ = Path(__file__).parent
 
@@ -380,9 +411,33 @@ def analizar(codigo: str, metodo: str):
     # Texto único (numerado) para la IA y para saber si el parser falló
     error_sintactico = texto_errores(errores_sint) or None
 
+    # FASE 3: Análisis Semántico.
+    # Es una pasada INDEPENDIENTE sobre el CST canónico que produce el parser
+    # descendente. Se ejecuta siempre (aunque el método de visualización sea
+    # Predictivo o LALR(1)) porque el CST del parser recursivo es el que
+    # conserva la estructura y las posiciones que necesita el visitor.
+    cst_semantico = ast if "Recursivo" in metodo else None
+    if cst_semantico is None:
+        try:
+            cst_semantico, _, _ = Parser(tokens).parse_con_pasos()
+        except Exception:
+            cst_semantico = None
+
+    analizador_sem = AnalizadorSemantico(cst_semantico) if cst_semantico else None
+    errores_sem: list[ErrorSemantico] = []
+    if analizador_sem is not None:
+        try:
+            errores_sem = analizador_sem.analizar()
+        except Exception as e:
+            errores_sem = [ErrorSemantico(
+                "?", "?", "",
+                f"Error interno del analizador semántico: {e}", "SEM-0",
+            )]
+    tabla_sem = analizador_sem.tabla if analizador_sem is not None else TablaSimbolos()
+
     return (utiles, lexer.errores, pd.DataFrame(filas), pd.DataFrame(errores),
             lexer.resumen_identificadores(), chequeo, ast, error_sintactico, traza_ll1,
-            errores_sint, pasos_arbol)
+            errores_sint, pasos_arbol, errores_sem, tabla_sem)
 
 
 # =============================================================================
@@ -537,7 +592,13 @@ with st.sidebar.expander("⚙️ Configuración de API (Opcional)"):
 # busca primero en st.secrets y luego en las variables de entorno / .env
 api_key_activa = api_key_manual.strip() if api_key_manual else None
 
-if api_key_activa:
+if not OPENAI_DISPONIBLE:
+    st.sidebar.warning(
+        "⚠️ El paquete `openai` no está instalado: la app funciona con "
+        "normalidad, pero el botón de IA del bonus no estará disponible. "
+        "Para habilitarlo ejecute `pip install openai python-dotenv`."
+    )
+elif api_key_activa:
     st.sidebar.warning("⚠️ Usando clave temporal manual")
 else:
     origen = origen_api_key()
@@ -563,7 +624,7 @@ if not codigo.strip():
     st.stop()
 
 (tokens, errores, tabla, tabla_err, identificadores, chequeo, ast, error_sintactico,
- traza_ll1, errores_sint, pasos_arbol) = analizar(codigo, metodo_analisis)
+ traza_ll1, errores_sint, pasos_arbol, errores_sem, tabla_sem) = analizar(codigo, metodo_analisis)
 
 # Para el método Ascendente LALR(1), generamos tokens vía léxico
 # ya que analizar() está diseñado para LL(1)
@@ -654,7 +715,7 @@ else:
     parser_lalr_instance = None
 
 # --- Metricas ---
-c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Tokens Validos", len(tokens))
 c2.metric("Errores Léxicos", len(errores), delta=None if not errores else f"{len(errores)} fallos",
           delta_color="inverse")
@@ -663,6 +724,9 @@ estado_parser = "Exitoso" if not error_sintactico else "Fallido"
 n_err_sint = len(errores_sint)
 c4.metric("Parser", estado_parser,
           delta=None if not n_err_sint else f"{n_err_sint} {'error' if n_err_sint == 1 else 'errores'}",
+          delta_color="inverse")
+c5.metric("Errores Semánticos", len(errores_sem),
+          delta=None if not errores_sem else f"{len(errores_sem)} {'error' if len(errores_sem) == 1 else 'errores'}",
           delta_color="inverse")
 
 with st.expander("Ver / editar el código fuente", expanded=False):
@@ -676,6 +740,7 @@ pestañas = st.tabs([
     "Traza LALR(1)",
     "Tabla ACTION/GOTO",
     "Tabla de símbolos",
+    "Análisis Semántico",
     "Errores y verificación",
     "Resumen",
     "Traducción a Gleam",
@@ -1034,14 +1099,86 @@ with pestañas[5]:
         use_container_width=True, hide_index=True, height=460,
     )
 
-# --- 4. Errores y Asistente IA ----------------------------------------------
+# --- Pestaña: Análisis Semántico (SEM-1 .. SEM-5) ---------------------------
 with pestañas[6]:
-    st.subheader("Reporte de errores léxicos y sintácticos")
+    st.subheader("Análisis Semántico — Reglas SEM-1 a SEM-5")
+    st.caption(
+        "Fase independiente del parser: un visitor recorre el CST, construye la "
+        "tabla de símbolos y valida las reglas semánticas. Tras cada error el "
+        "análisis continúa (recuperación) para reportarlos todos."
+    )
 
-    tiene_problemas = bool(errores) or bool(error_sintactico)
+    filas_sem = tabla_sem.filas()
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Símbolos en la tabla", len(filas_sem))
+    m2.metric("Errores semánticos", len(errores_sem))
+    m3.metric("Ámbitos abiertos", len(tabla_sem.ambitos))
+
+    st.markdown("#### Tabla de símbolos")
+    if filas_sem:
+        df_sem = pd.DataFrame(filas_sem)[
+            ["Nivel", "Ámbito", "Lexema", "Tipo", "Categoría", "Fila", "Columna",
+             "Inicializada", "Detalle"]
+        ]
+        st.dataframe(df_sem, use_container_width=True, hide_index=True, height=320)
+    else:
+        st.info("La tabla de símbolos está vacía: el programa no declara nada.")
+
+    st.markdown("#### Errores semánticos detectados")
+    if not errores_sem:
+        st.success("Sin errores semánticos: se cumplen las 5 reglas (SEM-1 a SEM-5).")
+    else:
+        st.dataframe(
+            pd.DataFrame([
+                {"#": i, "Regla": e.regla, "Fila": e.fila, "Columna": e.columna,
+                 "Lexema": e.lexema, "Mensaje": e.mensaje}
+                for i, e in enumerate(errores_sem, start=1)
+            ]),
+            use_container_width=True, hide_index=True,
+        )
+        for e in errores_sem:
+            st.markdown(
+                f"**{e.regla or 'SEM'} — fila {e.fila}, columna {e.columna}** "
+                f"(lexema `{e.lexema}`): {e.mensaje}"
+            )
+
+        st.divider()
+        st.markdown("### ✨ Sugerencia de la IA (Modalidad A del bonus)")
+        st.caption(
+            "Las reglas clásicas detectan el error; el modelo de lenguaje solo "
+            "explica la causa y propone la corrección. Ambas capas coexisten."
+        )
+        if st.button("🤖 Explicar y corregir estos errores semánticos con IA", key="btn_ia_sem"):
+            with st.spinner("El asistente de IA está analizando los errores semánticos..."):
+                sugerencia = analizar_error_semantico_con_ia(
+                    codigo, errores_sem, tabla_sem, api_key=api_key_activa
+                )
+                st.markdown(sugerencia)
+
+    with st.expander("¿Qué valida cada regla?"):
+        st.markdown(
+            "- **SEM-1 · Declaración**: el tipo anotado debe coincidir con el tipo "
+            "inferido de la expresión; si no hay anotación, se infiere.\n"
+            "- **SEM-2 · Identificadores**: todo identificador usado debe estar "
+            "declarado en el ámbito actual o en uno ancestro. `escuche_pues(x)` "
+            "declara e inicializa `x`.\n"
+            "- **SEM-3 · Operandos**: los operadores aritméticos exigen el mismo "
+            "tipo (`numerito` o `quebradito`), `%` exige `numerito`, y los lógicos "
+            "exigen `siono`.\n"
+            "- **SEM-4 · Condiciones**: la condición de `si_acaso` y `mientras_que` "
+            "debe ser `siono`.\n"
+            "- **SEM-5 · Llamadas**: la función debe existir, la aridad debe "
+            "coincidir y cada argumento debe tener el tipo del parámetro formal."
+        )
+
+# --- 4. Errores y Asistente IA ----------------------------------------------
+with pestañas[7]:
+    st.subheader("Reporte de errores léxicos, sintácticos y semánticos")
+
+    tiene_problemas = bool(errores) or bool(error_sintactico) or bool(errores_sem)
 
     if not tiene_problemas:
-        st.success("¡Todo melo! No se encontró ningún error léxico ni sintáctico en esta entrada.")
+        st.success("¡Todo melo! No se encontró ningún error léxico, sintáctico ni semántico en esta entrada.")
     else:
         if errores:
             st.markdown("#### ❌ Errores Léxicos")
@@ -1056,6 +1193,15 @@ with pestañas[6]:
                         else f"#### ❌ Errores Sintácticos ({len(errores_sint)})")
             mostrar_lista_errores(errores_sint)
 
+        if errores_sem:
+            st.markdown("#### ❌ Error Semántico" if len(errores_sem) == 1
+                        else f"#### ❌ Errores Semánticos ({len(errores_sem)})")
+            for e in errores_sem:
+                st.markdown(
+                    f"**{e.regla or 'SEM'} — fila {e.fila}, columna {e.columna}** "
+                    f"(lexema `{e.lexema}`): {e.mensaje}"
+                )
+
         st.divider()
         st.markdown("### 🤖 Diagnóstico y Sugerencia con Inteligencia Artificial")
         st.markdown(
@@ -1068,7 +1214,7 @@ with pestañas[6]:
                 st.markdown(sugerencia_ia)
 
 # --- 5. Resumen -------------------------------------------------------------
-with pestañas[7]:
+with pestañas[8]:
     st.subheader("Distribución de tokens por categoría")
     conteo = (tabla["Categoría"].value_counts().rename_axis("Categoría")
               .reset_index(name="Tokens"))
@@ -1077,7 +1223,7 @@ with pestañas[7]:
     der.dataframe(conteo, use_container_width=True, hide_index=True)
 
 # --- 6. Traduccion a Gleam --------------------------------------------------
-with pestañas[8]:
+with pestañas[9]:
     st.subheader("En qué se convierte cada token")
     st.dataframe(
         tabla[["#", "Lexema", "TokenType", "Gleam", "Directo"]],
@@ -1085,7 +1231,7 @@ with pestañas[8]:
     )
 
 # --- 7. Codigo del analizador ----------------------------------------------
-with pestañas[9]:
+with pestañas[10]:
     st.subheader("El analizador léxico y sintáctico, en Python puro")
     st.caption("Fragmentos leídos en vivo de los módulos core.")
 
@@ -1095,7 +1241,7 @@ with pestañas[9]:
         st.code(_fuente_lexer, language="python")
 
 # --- 8. Referencia ----------------------------------------------------------
-with pestañas[10]:
+with pestañas[11]:
     st.subheader("Documentación del lenguaje")
     doc = st.radio("Documento", ["Gramática BNF", "Mapeo a Gleam", "README"], horizontal=True)
     archivo = {"Gramática BNF": "gramatica_BNF_Paisascript.txt",
