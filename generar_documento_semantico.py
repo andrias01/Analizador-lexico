@@ -495,7 +495,11 @@ def construir_html():
   <div class="meta">
     <p><b>Lenguaje fuente:</b> Paisascript</p>
     <p><b>Lenguaje destino:</b> Gleam</p>
-    <p><b>Integrantes:</b> Julián (proyecto Analizador-lexico)</p>
+    <p><b>Integrantes:</b> Andres Felipe Velez &middot;
+       Angie Amaya Fernandez &middot;
+       Julian David Guarnizo Castrillon</p>
+    <p><b>Repositorio:</b> github.com/JulianG08/Analizador-lexico</p>
+    <p><b>App en vivo:</b> compiladorlex.streamlit.app</p>
     <p><b>Bonus:</b> Modalidad A — IA como capa adicional de validación semántica</p>
   </div>
 </div>
