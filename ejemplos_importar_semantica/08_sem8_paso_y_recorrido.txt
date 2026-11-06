@@ -1,0 +1,22 @@
+// ============================================================================
+//  SEM-8 — Paso del pa_cada distinto de cero y recorrido alcanzable
+//  Nodos: <sent_para>, <paso_opcional>
+//  Restricción: el paso no puede ser 0; su signo debe concordar con los
+//  límites 'desde' y 'hasta' (plegado de constantes).
+// ============================================================================
+
+// SEM-8: paso 0, la variable de control nunca avanza.
+pa_cada i desde 1 hasta 10 de_a 0 dele_pues
+    hable_pues(i)
+listo_pues
+
+// SEM-8: paso positivo (+1 implícito) pero desde > hasta: el cuerpo nunca
+// se ejecuta.
+pa_cada j desde 10 hasta 1 dele_pues
+    hable_pues(j)
+listo_pues
+
+// SEM-8: paso negativo pero desde < hasta: el cuerpo nunca se ejecuta.
+pa_cada k desde 1 hasta 10 de_a -1 dele_pues
+    hable_pues(k)
+listo_pues

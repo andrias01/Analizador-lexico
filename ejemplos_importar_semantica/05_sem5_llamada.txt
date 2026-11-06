@@ -1,0 +1,21 @@
+// ============================================================================
+//  SEM-5 — Llamada a función: existencia, aridad y tipos
+//  Nodos: <sent_llamada>, <sufijo_id> dentro de <expr_primaria>
+//  Restricción: la función debe existir, la aridad debe coincidir y cada
+//  argumento debe tener el tipo del parámetro formal.
+// ============================================================================
+
+hagale_pues sumar(numerito a, numerito b) pa_que_lleve numerito dele_pues
+    entregue_pues a + b
+ya_quedo
+
+// SEM-5: 'sumar' existe, pero se pasa un solo argumento (espera dos).
+pille_pues numerito resultado = sumar(5)
+
+// SEM-5: el segundo argumento es 'cuento', y el parámetro formal es 'numerito'.
+pille_pues numerito otro = sumar(5, "diez")
+
+// SEM-5: la función 'restar' nunca fue declarada.
+pille_pues numerito tercero = restar(10, 2)
+
+hable_pues(resultado)

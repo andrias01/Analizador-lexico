@@ -1,0 +1,17 @@
+// ============================================================================
+//  SEM-7 — La variable de control del pa_cada es de solo lectura
+//  Nodo: <sent_para> y su <bloque>
+//  Restricción: el cuerpo no puede redefinir ni volver a leer con
+//  escuche_pues la variable de control (atributo heredado 'escribible').
+// ============================================================================
+
+// SEM-7: 'm' es la variable de control; no se puede reenlazar con pille_pues.
+pa_cada m desde 1 hasta 3 dele_pues
+    pille_pues m = 99
+    hable_pues(m)
+listo_pues
+
+// SEM-7: tampoco se puede volver a leer con escuche_pues.
+pa_cada n desde 1 hasta 3 dele_pues
+    escuche_pues(n)
+listo_pues

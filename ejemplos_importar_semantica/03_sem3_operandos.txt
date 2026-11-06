@@ -1,0 +1,21 @@
+// ============================================================================
+//  SEM-3 — Compatibilidad de operandos en operadores
+//  Nodos: <expr_aditiva>, <expr_multiplicativa>, relacionales y lógicos
+//  Restricción: los operandos aritméticos deben ser del mismo tipo
+//  (numerito o quebradito); Gleam no mezcla Int y Float implícitamente.
+// ============================================================================
+
+pille_pues quebradito precio = 19.99
+pille_pues numerito cantidad = 3
+
+// SEM-3: se suma quebradito (Float) con numerito (Int) sin conversión.
+pille_pues total = precio + cantidad
+
+// SEM-3: '%' solo admite numerito.
+pille_pues sobrante = precio % 2
+
+// SEM-3: los operadores lógicos exigen siono, no numerito.
+pille_pues numerito activo = 1
+pille_pues bandera = activo y_tambien sizas
+
+hable_pues(total)

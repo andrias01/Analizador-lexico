@@ -1,0 +1,16 @@
+// ============================================================================
+//  SEM-1 — Declaración de variable y compatibilidad de tipos
+//  Nodo: <sent_declaracion>
+//  Restricción: si hay anotación de tipo, type(expr) debe coincidir con ella.
+// ============================================================================
+
+// Correcto: no genera error, sirve de contraste.
+pille_pues numerito edad_correcta = 20
+
+// SEM-1: se declara 'numerito' (entero) pero la expresión es 'cuento' (texto).
+pille_pues numerito edad = "veinte anios"
+
+// SEM-1: se declara 'siono' (booleano) pero la expresión es 'numerito'.
+pille_pues siono activo = 5
+
+hable_pues(edad_correcta)

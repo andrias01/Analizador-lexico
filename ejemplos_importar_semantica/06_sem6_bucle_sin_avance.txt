@@ -1,0 +1,24 @@
+// ============================================================================
+//  SEM-6 — Terminación del bucle: la condición tiene que poder cambiar
+//  Nodos: <sent_mientras>, <sent_repita>
+//  Restricción: el cuerpo debe redefinir alguna variable que la condición
+//  lee; la condición no puede ser una constante.
+// ============================================================================
+
+// SEM-6: el cuerpo no toca 'tope', así que la condición nunca cambia.
+pille_pues numerito tope = 10
+mientras_que tope > 0 dele_pues
+    hable_pues("doy vueltas sin avanzar")
+hasta_ahi
+
+// SEM-6: condición constante, el bucle nunca termina.
+mientras_que sizas dele_pues
+    hable_pues("esto no para")
+hasta_ahi
+
+// SEM-6: en repita_pues, hasta_que es la condición de SALIDA; aquí el cuerpo
+// no toca 'veces', así que nunca se cumple y el bucle no termina.
+pille_pues numerito veces = 0
+repita_pues
+    hable_pues("tampoco avanza")
+hasta_que veces > 5

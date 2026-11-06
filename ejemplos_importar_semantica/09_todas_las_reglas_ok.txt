@@ -1,0 +1,28 @@
+// ============================================================================
+//  Programa SIN errores que ejercita las ocho reglas semánticas (SEM-1 a
+//  SEM-8). Sirve de contraste: el mismo tipo de construcción que falla en
+//  los otros archivos, aquí escrita correctamente.
+// ============================================================================
+
+hagale_pues sumatoria(numerito n) pa_que_lleve numerito dele_pues
+    pille_pues numerito acumulado = 0            // SEM-1: tipo coincide
+    pille_pues numerito i = 1
+    mientras_que i <= n dele_pues                // SEM-4: condición siono
+        pille_pues acumulado = acumulado + i     // SEM-3 y SEM-6: avanza
+        pille_pues i = i + 1
+    hasta_ahi
+    entregue_pues acumulado
+ya_quedo
+
+pille_pues numerito total = sumatoria(10)        // SEM-5: aridad y tipos ok
+hable_pues(total)                                // SEM-2: identificador declarado
+
+pa_cada k desde 0 hasta 10 de_a 2 dele_pues      // SEM-8: paso y límites ok
+    hable_pues("k vale: " <> k)
+listo_pues                                       // SEM-7: 'k' nunca se reescribe
+
+pille_pues numerito intentos = 0
+repita_pues
+    pille_pues intentos = intentos + 1           // SEM-6: avanza hacia su salida
+    hable_pues("vuelta " <> intentos)
+hasta_que intentos >= 3                          // SEM-4: condición siono

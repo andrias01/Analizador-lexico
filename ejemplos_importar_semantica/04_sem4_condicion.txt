@@ -1,0 +1,25 @@
+// ============================================================================
+//  SEM-4 — Condición de control de tipo booleano
+//  Nodos: <sent_si>, <sent_mientras>, <sent_repita>
+//  Restricción: la condición debe ser de tipo siono.
+// ============================================================================
+
+pille_pues numerito cantidad = 3
+
+// SEM-4: la condición de si_acaso es numerito, no siono.
+si_acaso cantidad entonces_pues
+    hable_pues("hay unidades")
+asi_quedo
+
+// SEM-4: la condición de mientras_que es cuento, no siono.
+// (el cuerpo sí redefine 'estado', para no mezclar esto con SEM-6)
+pille_pues cuento estado = "activo"
+mientras_que estado dele_pues
+    pille_pues estado = "listo"
+hasta_ahi
+
+// SEM-4: hasta_que también exige siono (aplica al tercer bucle, repita_pues).
+pille_pues numerito contador = 0
+repita_pues
+    pille_pues contador = contador + 1
+hasta_que contador

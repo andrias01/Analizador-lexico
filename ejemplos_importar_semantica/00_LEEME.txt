@@ -1,0 +1,30 @@
+=============================================================================
+ EJEMPLOS PARA LA SECCION DE IMPORTACION DE ARCHIVOS
+=============================================================================
+
+Como usarlos:
+  1. Abrir la app (streamlit run app.py).
+  2. En la barra lateral, usar "Archivo de código" (acepta .txt y .paisa).
+  3. Subir cualquiera de estos archivos.
+  4. Ir a la pestaña "Análisis Semántico" para ver la tabla de símbolos y
+     los errores; o a "Errores y verificación" para ver todo junto.
+
+Cada archivo aisla UNA regla semántica (o un grupo pequeño), para poder
+mostrarla sola durante la sustentación sin que otros errores distraigan.
+El archivo 09 junta las ocho reglas en un solo programa que NO tiene
+errores, para demostrar que el compilador acepta código correcto.
+
+  01_sem1_tipos_declaracion.txt   SEM-1  tipo declarado vs. tipo de la expr.
+  02_sem2_identificador.txt       SEM-2  identificador no declarado
+  03_sem3_operandos.txt           SEM-3  operandos incompatibles
+  04_sem4_condicion.txt           SEM-4  condición de control no booleana
+  05_sem5_llamada.txt             SEM-5  aridad y tipos de argumentos
+  06_sem6_bucle_sin_avance.txt    SEM-6  bucle que no puede terminar
+  07_sem7_variable_control.txt    SEM-7  variable de control reescrita
+  08_sem8_paso_y_recorrido.txt    SEM-8  paso 0 / recorrido imposible
+  09_todas_las_reglas_ok.txt      las ocho reglas, programa SIN errores
+  10_todos_los_errores_juntos.txt las ocho reglas violadas a la vez (8 errores, una por regla)
+
+Todos estos archivos son léxica y sintácticamente válidos: el lexer y el
+parser los aceptan sin queja. Los errores que reportan son EXCLUSIVAMENTE
+semánticos.

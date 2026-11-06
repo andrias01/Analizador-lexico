@@ -1,0 +1,47 @@
+// ============================================================================
+//  Las ocho reglas violadas en un solo programa. El compilador NO se
+//  detiene en el primer error: reporta todos en una sola pasada
+//  (recuperación). Útil para mostrar de un vistazo la tabla completa de
+//  errores en la pestaña "Errores y verificación".
+// ============================================================================
+
+hagale_pues sumar(numerito a, numerito b) pa_que_lleve numerito dele_pues
+    entregue_pues a + b
+ya_quedo
+
+// SEM-1
+pille_pues numerito edad = "veinte anios"
+
+// SEM-3
+pille_pues quebradito precio = 19.99
+pille_pues numerito cantidad = 3
+pille_pues total = precio + cantidad
+
+// SEM-2
+hable_pues(saldo_disponible)
+
+// SEM-4
+si_acaso cantidad entonces_pues
+    hable_pues("hay unidades")
+asi_quedo
+
+// SEM-5
+pille_pues numerito resultado = sumar(5)
+
+// SEM-6
+pille_pues numerito tope = 10
+mientras_que tope > 0 dele_pues
+    hable_pues("no avanza")
+hasta_ahi
+
+// SEM-7
+pa_cada m desde 1 hasta 3 dele_pues
+    pille_pues m = 99
+listo_pues
+
+// SEM-8
+pa_cada j desde 10 hasta 1 dele_pues
+    hable_pues(j)
+listo_pues
+
+hable_pues(resultado)

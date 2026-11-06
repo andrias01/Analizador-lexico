@@ -1,0 +1,18 @@
+// ============================================================================
+//  SEM-2 — Uso de identificadores: declaración previa y visibilidad
+//  Nodos: <expr_primaria> (IDENTIFICADOR), <sent_lectura>
+//  Restricción: todo identificador usado debe existir en el ámbito actual
+//  o en alguno de sus ancestros.
+// ============================================================================
+
+pille_pues numerito saldo = 1000
+
+// SEM-2: 'saldo_disponible' nunca fue declarado.
+hable_pues(saldo_disponible)
+
+si_acaso saldo > 0 entonces_pues
+    pille_pues numerito bono = 50
+asi_quedo
+
+// SEM-2: 'bono' solo existe dentro del si_acaso anterior; aquí ya cerró su ámbito.
+hable_pues(bono)
